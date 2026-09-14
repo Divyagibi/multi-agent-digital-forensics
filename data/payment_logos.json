@@ -1,0 +1,65 @@
+[
+  {
+    "name": "Visa",
+    "type": "card_network",
+    "keywords": ["visa", "visa secure", "verified by visa"],
+    "official_domains": ["visa.com"],
+    "checkout_indicators": ["visa", "card-number", "cc-number"]
+  },
+  {
+    "name": "Mastercard",
+    "type": "card_network",
+    "keywords": ["mastercard", "mastercard id check", "master card"],
+    "official_domains": ["mastercard.com"],
+    "checkout_indicators": ["mastercard", "card-number"]
+  },
+  {
+    "name": "American Express",
+    "type": "card_network",
+    "keywords": ["american express", "amex", "safekey"],
+    "official_domains": ["americanexpress.com"],
+    "checkout_indicators": ["amex", "american-express"]
+  },
+  {
+    "name": "PayPal",
+    "type": "digital_wallet",
+    "keywords": ["paypal", "pay with paypal", "paypal verified"],
+    "official_domains": ["paypal.com", "paypal-objects.com"],
+    "checkout_indicators": ["paypal.com/sdk", "paypalobjects.com", "paypal.com/cgi-bin/webscr", "paypal-button"]
+  },
+  {
+    "name": "Stripe",
+    "type": "payment_gateway",
+    "keywords": ["stripe", "powered by stripe", "secured by stripe"],
+    "official_domains": ["stripe.com"],
+    "checkout_indicators": ["js.stripe.com", "api.stripe.com", "stripe-elements"]
+  },
+  {
+    "name": "Apple Pay",
+    "type": "digital_wallet",
+    "keywords": ["apple pay", "applepay", "pay with apple pay"],
+    "official_domains": ["apple.com"],
+    "checkout_indicators": ["apple-pay-button", "applepay.js"]
+  },
+  {
+    "name": "Google Pay",
+    "type": "digital_wallet",
+    "keywords": ["google pay", "gpay", "pay with google pay"],
+    "official_domains": ["google.com", "pay.google.com"],
+    "checkout_indicators": ["pay.google.com/gp/p/js/pay.js", "google-pay-button"]
+  },
+  {
+    "name": "Discover",
+    "type": "card_network",
+    "keywords": ["discover", "discover network", "discover card"],
+    "official_domains": ["discover.com"],
+    "checkout_indicators": ["discover"]
+  },
+  {
+    "name": "UPI",
+    "type": "instant_payment_system",
+    "keywords": ["upi", "unified payments interface", "bhim upi", "paytm upi", "phonepe upi", "gpay upi"],
+    "official_domains": ["npci.org.in"],
+    "checkout_indicators": ["upi://pay", "@upi", "upi-qr"]
+  }
+]

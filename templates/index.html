@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Digital Forensics &amp; Evidence Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- APPLICATION HEADER -->
+    <header>
+        <div class="header-brand">
+            <div class="header-icon">🛡️</div>
+            <div class="header-title">
+                <h1>Multi-Agent Digital Forensics</h1>
+                <span>Distributed Website &amp; QR Evidence Analysis System</span>
+            </div>
+        </div>
+        <div class="header-badge">
+            <span>● Phase 1: Evidence Collection (Agents 1–18)</span>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD LAYOUT -->
+    <div class="main-container">
+
+        <!-- LEFT PANEL: INPUT, AGENTS GRID & EVIDENCE DETAILS -->
+        <main class="left-panel">
+
+            <!-- INPUT SECTION: DUAL MODE (URL / QR CODE) -->
+            <section class="card-section url-section">
+                <div class="section-title">
+                    <span>Evidence Target Input</span>
+                    <span id="inputSourceBadge" class="source-pill">Direct URL Mode</span>
+                </div>
+
+                <!-- INPUT MODE TABS -->
+                <div class="input-tabs">
+                    <button id="tabUrlBtn" class="input-tab active" onclick="switchInputTab('url')">
+                        <span>🔗 Target URL</span>
+                    </button>
+                    <button id="tabQrBtn" class="input-tab" onclick="switchInputTab('qr')">
+                        <span>📷 QR Code Image Upload</span>
+                    </button>
+                </div>
+
+                <!-- TAB 1: URL INPUT -->
+                <div id="urlInputContainer" class="url-input-group">
+                    <div class="url-input-wrapper">
+                        <input
+                            type="text"
+                            id="urlInput"
+                            class="url-input"
+                            placeholder="https://example.com"
+                            value="https://example.com"
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                    </div>
+                    <button id="analyzeBtn" class="analyze-btn" onclick="startAnalysis()">
+                        <span>Analyze URL</span>
+                    </button>
+                </div>
+
+                <!-- TAB 2: QR CODE UPLOAD -->
+                <div id="qrUploadContainer" class="qr-upload-group" style="display: none;">
+                    <div
+                        id="qrDropzone"
+                        class="qr-dropzone"
+                        onclick="document.getElementById('qrFileInput').click()"
+                        ondragover="handleQrDragOver(event)"
+                        ondragleave="handleQrDragLeave(event)"
+                        ondrop="handleQrDrop(event)"
+                    >
+                        <input
+                            type="file"
+                            id="qrFileInput"
+                            style="display: none;"
+                            accept="image/png, image/jpeg, image/jpg, image/webp"
+                            onchange="handleQrFileSelect(event)"
+                        >
+                        <div class="qr-dropzone-content" id="qrDropContent">
+                            <div class="qr-icon">📷</div>
+                            <div class="qr-prompt">
+                                <strong>Click or drag &amp; drop a QR code image here</strong>
+                                <span>Supports PNG, JPG, JPEG, WEBP formats</span>
+                            </div>
+                        </div>
+                        <div id="qrPreviewArea" class="qr-preview-area" style="display: none;">
+                            <img id="qrPreviewImg" class="qr-thumb" alt="QR Preview">
+                            <div class="qr-preview-info">
+                                <span id="qrFileName" class="qr-file-name">qr-code.png</span>
+                                <span id="qrStatusText" class="qr-status-text">Ready to decode</span>
+                            </div>
+                            <button class="qr-clear-btn" onclick="clearQrUpload(event)">✕</button>
+                        </div>
+                    </div>
+                    <button id="analyzeQrBtn" class="analyze-btn" onclick="startQrAnalysis()" disabled>
+                        <span>Decode &amp; Analyze</span>
+                    </button>
+                </div>
+
+                <!-- DECODED TARGET BANNER -->
+                <div id="decodedTargetBanner" class="decoded-target-banner" style="display: none;">
+                    <div class="decoded-label">DECODED TARGET URL:</div>
+                    <div id="decodedTargetUrl" class="decoded-url-text">https://...</div>
+                    <span class="decoded-badge">Passed to Agents 1–17</span>
+                </div>
+            </section>
+
+            <!-- 18 FORENSIC AGENTS GRID -->
+            <section class="card-section">
+                <div class="section-title">
+                    <span>18 Forensic Agents Architecture</span>
+                    <span id="systemStatus" style="font-size: 12px; color: var(--accent-cyan);">Ready for analysis</span>
+                </div>
+                <div class="agents-grid" id="agentsGrid">
+                    <!-- Dynamically generated via static/js/app.js -->
+                </div>
+            </section>
+
+            <!-- EVIDENCE DETAIL VIEWER -->
+            <section class="evidence-viewer-section" id="evidenceSection">
+                <div class="evidence-header">
+                    <div class="evidence-title-group">
+                        <h2 id="evidenceAgentTitle">Agent 1 — Domain Identity</h2>
+                        <span id="evidenceAgentSub">Domain registration, RDAP/WHOIS, age &amp; registrar</span>
+                    </div>
+                    <div id="evidenceStatusBadge" class="evidence-status-badge">
+                        Waiting
+                    </div>
+                </div>
+
+                <div id="evidenceContent">
+                    <!-- Dynamically populated when an agent card is selected -->
+                </div>
+            </section>
+
+        </main>
+
+        <!-- RIGHT PANEL: TRUST SCORE & ARCHITECTURE NOTES -->
+        <aside class="right-panel">
+
+            <div class="score-card">
+                <h2 style="font-size: 16px; font-weight: 700; color: #ffffff;">Overall Trust Score</h2>
+                
+                <div class="score-circle-wrapper">
+                    <div class="score-value" id="trustScore">--</div>
+                    <div class="score-sub">Trust Score</div>
+                </div>
+
+                <div class="score-status-text" id="trustStatus">
+                    Evidence Collection Phase
+                </div>
+
+                <div class="score-note">
+                    <strong>Rule:</strong> Trust scoring, feature weights, machine learning, and explainability (SHAP/LIME) are deferred to subsequent pipeline phases. Current objective is independent evidence collection.
+                </div>
+            </div>
+
+            <!-- ACTIVE EVIDENCE COLLECTION CHECKLIST -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Active Forensic Agents</div>
+                <div id="agentChecklist">
+                    <!-- Populated via static/js/app.js -->
+                </div>
+            </div>
+
+            <!-- ARCHITECTURAL PIPELINE SUMMARY -->
+            <div class="sidebar-section" style="margin-top: 14px;">
+                <div class="sidebar-title">Pipeline Status</div>
+                <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+                    <div>✓ <strong>Step 1:</strong> Input Ingestion (URL or QR Code)</div>
+                    <div>✓ <strong>Step 2:</strong> 18 Isolated Forensic Agents</div>
+                    <div>✓ <strong>Step 3:</strong> Evidence Collection &amp; Display</div>
+                    <div style="opacity: 0.5;">○ <strong>Step 4:</strong> Feature Extraction &amp; Normalization</div>
+                    <div style="opacity: 0.5;">○ <strong>Step 5:</strong> Multi-Agent Evidence Fusion</div>
+                    <div style="opacity: 0.5;">○ <strong>Step 6:</strong> Trust Score &amp; Explainability</div>
+                </div>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

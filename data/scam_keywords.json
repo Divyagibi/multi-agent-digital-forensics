@@ -1,0 +1,78 @@
+{
+  "financial": [
+    "guaranteed profit",
+    "instant money",
+    "double your money",
+    "double your bitcoin",
+    "zero risk investment",
+    "no risk investment",
+    "guaranteed return",
+    "daily return of",
+    "instant withdrawal",
+    "earn ₹",
+    "earn $10,000",
+    "become a millionaire",
+    "passive income guaranteed",
+    "crypto giveaway",
+    "send eth receive",
+    "send btc receive"
+  ],
+  "credential": [
+    "verify your account",
+    "confirm your password",
+    "validate your password",
+    "account suspended",
+    "account locked",
+    "login verification required",
+    "security verification required",
+    "update billing information",
+    "unusual activity detected",
+    "re-activate account",
+    "verify identity immediately"
+  ],
+  "prize_lottery": [
+    "congratulations you won",
+    "you have been selected",
+    "claim your prize",
+    "lottery winner",
+    "claim reward now",
+    "free gift card",
+    "free iphone winner",
+    "exclusive reward waiting",
+    "spin the wheel and win",
+    "unclaimed funds"
+  ],
+  "urgency": [
+    "act now",
+    "immediate action required",
+    "offer expires today",
+    "offer expires now",
+    "last chance",
+    "respond within",
+    "only 2 minutes remaining",
+    "your account will be deleted",
+    "before it is permanently closed",
+    "time is running out",
+    "urgent notice"
+  ],
+  "tech_support": [
+    "virus detected",
+    "call microsoft support",
+    "call apple support",
+    "toll free number",
+    "do not turn off your computer",
+    "critical error code",
+    "windows security alert",
+    "remote assistance required",
+    "infected with spyware"
+  ],
+  "payment": [
+    "wire transfer required",
+    "send gift card",
+    "pay with apple gift card",
+    "western union payment",
+    "untraceable payment method",
+    "crypto transfer required",
+    "mandatory processing fee"
+  ]
+}

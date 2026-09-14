@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Norton Secured / VeriSign",
+    "type": "security_seal",
+    "keywords": ["norton", "verisign", "norton secured", "symantec"],
+    "official_domains": ["norton.com", "verisign.com", "digicert.com"],
+    "verification_url_patterns": ["trustseal.norton.com", "seal.verisign.com", "seal.digicert.com"]
+  },
+  {
+    "name": "McAfee SECURE",
+    "type": "security_seal",
+    "keywords": ["mcafee", "mcafee secure", "trustedite"],
+    "official_domains": ["mcafee.com", "trustedsite.com"],
+    "verification_url_patterns": ["mcafeesecure.com/verify", "trustedsite.com/verify"]
+  },
+  {
+    "name": "DigiCert Smart Seal",
+    "type": "ssl_certificate_seal",
+    "keywords": ["digicert", "digicert secured", "smart seal"],
+    "official_domains": ["digicert.com"],
+    "verification_url_patterns": ["smartseal.digicert.com"]
+  },
+  {
+    "name": "Sectigo Trust Seal",
+    "type": "ssl_certificate_seal",
+    "keywords": ["sectigo", "comodo", "sectigo secured"],
+    "official_domains": ["sectigo.com", "comodo.com"],
+    "verification_url_patterns": ["trustlogo.com", "sectigo.com/trust-seal"]
+  },
+  {
+    "name": "BBB Accredited Business",
+    "type": "business_accreditation",
+    "keywords": ["bbb", "better business bureau", "bbb accredited"],
+    "official_domains": ["bbb.org"],
+    "verification_url_patterns": ["bbb.org/us/", "bbb.org/ca/"]
+  },
+  {
+    "name": "TRUSTe / TrustArc",
+    "type": "privacy_certification",
+    "keywords": ["truste", "trustarc", "privacy verified"],
+    "official_domains": ["truste.com", "trustarc.com"],
+    "verification_url_patterns": ["privacy.truste.com", "trustarc.com/seal"]
+  },
+  {
+    "name": "PCI-DSS Compliant",
+    "type": "payment_security_standard",
+    "keywords": ["pci-dss", "pci compliant", "pci dss certified"],
+    "official_domains": ["pcisecuritystandards.org"],
+    "verification_url_patterns": []
+  },
+  {
+    "name": "Generic 100% Secure / SSL Badge",
+    "type": "generic_trust_badge",
+    "keywords": ["100% secure", "100% safe", "ssl secure", "money back guarantee", "verified safe", "guaranteed safe checkout"],
+    "official_domains": [],
+    "verification_url_patterns": []
+  }
+]
