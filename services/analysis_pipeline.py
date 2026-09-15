@@ -4,8 +4,8 @@ Multi-Agent Digital Forensics System
 
 Manages the end-to-end execution workflow for both manual URLs and QR code image inputs.
 Maintains the unified target principle:
-- Manual URL -> URL -> Agents 1–17 (+ Agent 18 URL inspection) -> Central Evidence Store
-- QR Image   -> Agent 18 (Decode) -> Extracted URL -> Agents 1–17 (+ Agent 18 QR Evidence) -> Central Evidence Store
+- Manual URL -> URL -> Agents 1–17 (+ Agent 18 URL inspection) -> Central Evidence Store -> Evidence Ledger -> TCE -> AERE
+- QR Image   -> Agent 18 (Decode) -> Extracted URL -> Agents 1–17 (+ Agent 18 QR Evidence) -> Central Evidence Store -> Evidence Ledger -> TCE -> AERE
 """
 
 import uuid
@@ -33,6 +33,9 @@ from agents.agent17_malware import analyze_malware_indicators
 from agents.agent18_qr import analyze_qr, decode_qr_image, extract_embedded_url
 from services.evidence_ledger import EvidenceLedger
 from services.trust_calculation_engine import TrustCalculationEngine
+from services.aere_input_builder import build_aere_input_payload
+from services.aere_reasoning_engine import AEREReasoningEngine
+from services.aere_provider import MockProvider
 
 
 # Mapping of Agent Number to its analysis function
@@ -144,18 +147,77 @@ def create_analysis_session(
         "tce_summary": None,
         "trust_score": None,
         "risk_score": None,
-        "verdict": "not_calculated"
+        "verdict": "not_calculated",
+        "aere": None
     }
+
+
+def _execute_aere_reasoning_layer(
+    ledger: EvidenceLedger,
+    tce_res: Dict[str, Any],
+    target: Optional[Union[str, Dict[str, Any]]],
+    session_id: Optional[str],
+    aere_provider: Optional[Any] = None
+) -> Dict[str, Any]:
+    """
+    Internal helper to mediate and execute the AERE Reasoning Engine orchestration layer.
+    Ensures complete failure isolation so AERE exceptions cannot corrupt or abort the pipeline.
+    """
+    try:
+        aere_input = build_aere_input_payload(
+            ledger=ledger,
+            tce_result=tce_res,
+            target=target,
+            investigation_id=session_id
+        )
+        provider = aere_provider if aere_provider is not None else MockProvider()
+        reasoning_engine = AEREReasoningEngine(provider=provider, max_regeneration_attempts=1)
+        return reasoning_engine.execute_reasoning(aere_input)
+    except Exception as aere_err:
+        return {
+            "status": "fallback",
+            "aere_output": None,
+            "candidate_output": None,
+            "tce_preserved": True,
+            "tce_result": tce_res,
+            "grounding_report": None,
+            "failure": {
+                "stage": "pipeline_integration_exception",
+                "reason": str(aere_err),
+                "attempts_conducted": 0,
+                "max_regeneration_attempts": 1,
+                "invalid_evidence_ids": [],
+                "affected_claims": []
+            },
+            "execution_metadata": {
+                "engine_version": "1.0.0",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "provider_name": "unknown",
+                "model_id": None,
+                "generation_temperature": None,
+                "attempt_count": 0,
+                "max_regeneration_attempts": 1,
+                "input_contract_valid": False,
+                "output_contract_valid": False,
+                "grounding_validation_status": None,
+                "failure_stage": "pipeline_integration_exception",
+                "fallback_used": True,
+                "attempt_history": []
+            }
+        }
 
 
 def run_full_pipeline(
     input_data: Union[str, bytes],
-    input_type: str = "url"
+    input_type: str = "url",
+    aere_provider: Optional[Any] = None,
+    enable_aere: bool = True
 ) -> Dict[str, Any]:
     """
     Execute the entire 18-agent forensic analysis pipeline.
     Ensures that if input is QR, the extracted URL becomes the target for Agents 1–17.
-    Normalizes evidence, constructs Investigation Evidence Ledger, and calculates Trust/Risk.
+    Normalizes evidence, constructs Investigation Evidence Ledger, calculates Trust/Risk,
+    and executes AERE Evidence Reasoning as an additive qualitative layer.
     """
     target_url = None
     agent18_result = None
@@ -185,6 +247,18 @@ def run_full_pipeline(
             session["trust_score"] = tce_res["trust_score"]
             session["risk_score"] = tce_res["risk_score"]
             session["verdict"] = tce_res["verdict"]
+
+            if enable_aere:
+                session["aere"] = _execute_aere_reasoning_layer(
+                    ledger=ledger,
+                    tce_res=tce_res,
+                    target=qr_init["payload"],
+                    session_id=session.get("session_id"),
+                    aere_provider=aere_provider
+                )
+            else:
+                session["aere"] = None
+
             return session
 
         target_url = qr_init["target_url"]
@@ -221,7 +295,7 @@ def run_full_pipeline(
 
     ledger.correlate_relationships()
 
-    # Calculate Trust & Risk via TCE
+    # Calculate Trust & Risk via deterministic TCE
     tce = TrustCalculationEngine()
     tce_res = tce.calculate_trust(ledger)
 
@@ -232,5 +306,17 @@ def run_full_pipeline(
     session["trust_score"] = tce_res["trust_score"]
     session["risk_score"] = tce_res["risk_score"]
     session["verdict"] = tce_res["verdict"]
+
+    # Execute AERE Evidence Reasoning Layer (Additive, Sovereign TCE)
+    if enable_aere:
+        session["aere"] = _execute_aere_reasoning_layer(
+            ledger=ledger,
+            tce_res=tce_res,
+            target=target_url,
+            session_id=session.get("session_id"),
+            aere_provider=aere_provider
+        )
+    else:
+        session["aere"] = None
 
     return session
