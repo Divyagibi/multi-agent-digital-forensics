@@ -19,6 +19,7 @@ from agents.agent16_network import analyze_network_security
 from agents.agent17_malware import analyze_malware_indicators
 from agents.agent18_qr import analyze_qr, decode_qr_image, extract_embedded_url
 from services.analysis_pipeline import run_full_pipeline, process_qr_upload, run_single_agent
+from services.report_generator import generate_investigator_report
 
 app = Flask(__name__)
 
@@ -539,6 +540,35 @@ def evidence_ledger_endpoint():
         return jsonify(session.get("evidence_ledger", {}))
     except Exception as e:
         return jsonify({"error": f"Evidence Ledger generation failed: {str(e)}"}), 500
+
+
+@app.route("/api/report", methods=["POST"])
+def report_endpoint():
+    """
+    Endpoint to generate the Final Investigator Report (Step 5B).
+    Accepts either an existing completed session or a target url/qr_image.
+    Returns the serialized InvestigatorReportPayload JSON.
+    """
+    data = request.get_json() or {}
+    session = data.get("session")
+
+    if not session:
+        url = data.get("url")
+        qr_image = data.get("qr_image")
+        if qr_image:
+            session = run_full_pipeline(input_data=qr_image, input_type="qr")
+        elif url:
+            session = run_full_pipeline(input_data=url.strip(), input_type="url")
+        else:
+            return jsonify({"error": "Session, URL, or QR image is required"}), 400
+
+    confidence_payload = data.get("confidence_payload") or session.get("confidence")
+
+    try:
+        report = generate_investigator_report(session=session, confidence_payload=confidence_payload)
+        return jsonify(report.to_dict())
+    except Exception as e:
+        return jsonify({"error": f"Investigator Report generation failed: {str(e)}"}), 500
 
 
 if __name__ == "__main__":

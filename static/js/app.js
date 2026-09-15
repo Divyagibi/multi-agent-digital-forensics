@@ -30,6 +30,22 @@ let currentSelectedAgent = 1;
 let currentAnalysisSource = "Direct URL";
 let currentDecodedTarget = null;
 let currentQrFile = null;
+let currentTargetUrl = "https://example.com";
+let currentPipelineSession = null;
+let currentReportPayload = null;
+
+/**
+ * Universal HTML escape helper to prevent XSS / DOM injection
+ */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 // Initialize Dashboard
 document.addEventListener("DOMContentLoaded", () => {
@@ -46,6 +62,13 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+
+    // Escape key listener for report modal
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeInvestigatorReport();
+        }
+    });
 });
 
 /**
@@ -408,8 +431,12 @@ async function startAnalysis() {
 
     currentAnalysisSource = "Direct URL";
     currentDecodedTarget = targetUrl;
+    currentTargetUrl = targetUrl;
     const banner = document.getElementById("decodedTargetBanner");
     if (banner) banner.style.display = "none";
+
+    const reportCta = document.getElementById("reportCtaContainer");
+    if (reportCta) reportCta.style.display = "none";
 
     const systemStatus = document.getElementById("systemStatus");
     if (systemStatus) systemStatus.innerText = "Collecting forensic evidence across all 18 agents...";
@@ -475,7 +502,11 @@ async function executePipelineOnTarget(targetUrl, startAgent = 1, endAgent = 18)
 
     if (analyzeBtn) analyzeBtn.disabled = false;
     const systemStatus = document.getElementById("systemStatus");
-    if (systemStatus) systemStatus.innerText = "Evidence collection complete across all 18 agents. Click any card to inspect findings.";
+    if (systemStatus) systemStatus.innerText = "Evidence collection complete across all 18 agents. Click any card to inspect findings or view Final Report.";
+
+    // Reveal Final Investigator Report CTA button
+    const reportCta = document.getElementById("reportCtaContainer");
+    if (reportCta) reportCta.style.display = "flex";
 }
 
 /**
@@ -4655,9 +4686,7 @@ function renderAgent18Evidence(result, container) {
                     ${evidenceList.length > 0 ? `
                         <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
                             <thead>
-                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-dim);">
-                                    <th style="padding: 6px;">Category</th>
-                                    <th style="padding: 6px;">Evidence Type</th>
+                                                                <th style="padding: 6px;">Evidence Type</th>
                                     <th style="padding: 6px;">Observation</th>
                                     <th style="padding: 6px;">Source</th>
                                     <th style="padding: 6px;">Confidence</th>
@@ -4688,6 +4717,580 @@ function renderAgent18Evidence(result, container) {
             ${renderErrorBlock(result.errors)}
         </div>
     `;
+}
+
+/* =====================================================================
+   STEP 5C: FINAL INVESTIGATOR REPORT FRONTEND CONTROLLER & RENDERER
+   ===================================================================== */
+
+/**
+ * Open the Final Investigator Report Modal and initiate generation.
+ */
+function openInvestigatorReport() {
+    const modal = document.getElementById("investigatorReportModal");
+    if (!modal) return;
+
+    modal.style.display = "flex";
+    document.body.style.overflow = "hidden";
+
+    // Show loading state
+    document.getElementById("reportLoadingState").style.display = "flex";
+    document.getElementById("reportErrorState").style.display = "none";
+    document.getElementById("reportContentContainer").style.display = "none";
+
+    fetchAndRenderReport();
+}
+
+/**
+ * Close the Final Investigator Report Modal.
+ */
+function closeInvestigatorReport() {
+    const modal = document.getElementById("investigatorReportModal");
+    if (!modal) return;
+    modal.style.display = "none";
+    document.body.style.overflow = "auto";
+}
+
+/**
+ * Fetch the authoritative InvestigatorReportPayload from /api/report
+ */
+async function fetchAndRenderReport() {
+    const loadingState = document.getElementById("reportLoadingState");
+    const errorState = document.getElementById("reportErrorState");
+    const contentContainer = document.getElementById("reportContentContainer");
+    const errorText = document.getElementById("reportErrorText");
+
+    loadingState.style.display = "flex";
+    errorState.style.display = "none";
+    contentContainer.style.display = "none";
+
+    const target = currentDecodedTarget || currentTargetUrl || (document.getElementById("urlInput") ? document.getElementById("urlInput").value.trim() : "https://example.com");
+
+    try {
+        const response = await fetch("/api/report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: target,
+                session: currentPipelineSession
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status} Failed to generate report.`);
+        }
+
+        const reportPayload = await response.json();
+        currentReportPayload = reportPayload;
+
+        renderInvestigatorReport(reportPayload);
+
+        loadingState.style.display = "none";
+        contentContainer.style.display = "flex";
+    } catch (err) {
+        console.error("Report generation error:", err);
+        loadingState.style.display = "none";
+        errorText.innerText = "Final Investigator Report could not be generated: " + err.message;
+        errorState.style.display = "flex";
+    }
+}
+
+/**
+ * Render all 10 authoritative report sections into the dossier view.
+ */
+function renderInvestigatorReport(report) {
+    const container = document.getElementById("reportContentContainer");
+    if (!container) return;
+
+    const ov = report.overview || {};
+    const as = report.assessment || {};
+    const target = ov.target || {};
+
+    let html = `
+        <!-- SECTION 1: INVESTIGATION OVERVIEW -->
+        <section class="report-section" id="reportSecOverview">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">01</span>
+                    <h3 class="report-section-title">Investigation Overview</h3>
+                </div>
+                <span class="header-badge">ID: ${escapeHtml(ov.investigation_id || "N/A")}</span>
+            </div>
+            <div class="overview-grid">
+                <div class="overview-item">
+                    <span class="overview-label">Target URL / Entity</span>
+                    <span class="overview-value">${escapeHtml(target.target_url || target.original_input || "N/A")}</span>
+                </div>
+                <div class="overview-item">
+                    <span class="overview-label">Input Modality</span>
+                    <span class="overview-value">${escapeHtml(target.input_type || "url").toUpperCase()}</span>
+                </div>
+                <div class="overview-item">
+                    <span class="overview-label">Investigation Timestamp</span>
+                    <span class="overview-value">${escapeHtml(ov.investigation_timestamp || "N/A")}</span>
+                </div>
+                <div class="overview-item">
+                    <span class="overview-label">Report Generated At</span>
+                    <span class="overview-value">${escapeHtml(report.generated_at || "N/A")}</span>
+                </div>
+                <div class="overview-item">
+                    <span class="overview-label">Pipeline Status</span>
+                    <span class="overview-value">${escapeHtml(ov.execution_status || "completed").toUpperCase()}</span>
+                </div>
+                <div class="overview-item">
+                    <span class="overview-label">Telemetry Coverage</span>
+                    <span class="overview-value">${Number(report.telemetry_coverage_score || 0).toFixed(1)}% (${(report.observed_dimensions || []).length} / 18 Agents)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: FINAL ASSESSMENT HERO -->
+        <section class="report-section" id="reportSecAssessment">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">02</span>
+                    <h3 class="report-section-title">Final Assessment &amp; Epistemic Sovereignty</h3>
+                </div>
+                <span class="verdict-pill verdict-${escapeHtml(as.tce_verdict || 'unknown')}">${escapeHtml((as.tce_verdict || 'unknown').replace(/_/g, ' '))}</span>
+            </div>
+            <div class="assessment-hero">
+                <div class="assessment-axiom-banner">
+                    <span class="axiom-badge">⚖️ RISK ≠ TRUST ≠ CONFIDENCE</span>
+                    <span class="axiom-sub">Grounding validity verifies citation alignment with evidence; it is not metaphysical truth.</span>
+                </div>
+                <div class="assessment-metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-card-title">TCE Risk Score</span>
+                        <span class="metric-card-value" style="color: #f87171;">${as.tce_risk_score !== null && as.tce_risk_score !== undefined ? Number(as.tce_risk_score).toFixed(2) : "--"}</span>
+                        <span class="metric-card-sub">Bounded Saturation [0.0 - 100.0]</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-card-title">TCE Trust Score</span>
+                        <span class="metric-card-value" style="color: #34d399;">${as.tce_trust_score !== null && as.tce_trust_score !== undefined ? Number(as.tce_trust_score).toFixed(2) : "--"}</span>
+                        <span class="metric-card-sub">Verified Legitimacy [0.0 - 100.0]</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-card-title">Evidence Confidence (C_ev)</span>
+                        <span class="metric-card-value" style="color: var(--accent-cyan);">${as.evidence_confidence !== null && as.evidence_confidence !== undefined ? Number(as.evidence_confidence).toFixed(2) : "--"}</span>
+                        <span class="metric-card-sub">Telemetry &amp; Reliability [0 - 100]</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-card-title">Reasoning Fidelity (C_interp)</span>
+                        <span class="metric-card-value" style="color: #a78bfa;">${as.interpretation_confidence !== null && as.interpretation_confidence !== undefined ? Number(as.interpretation_confidence).toFixed(2) : "--"}</span>
+                        <span class="metric-card-sub">Citation Grounding [0 - 100]</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-card-title">Composite Confidence</span>
+                        <span class="metric-card-value" style="color: #60a5fa;">${as.composite_confidence !== null && as.composite_confidence !== undefined ? Number(as.composite_confidence).toFixed(2) : "--"}</span>
+                        <span class="metric-card-sub">Epistemic Index [0 - 100]</span>
+                    </div>
+                </div>
+                <div class="abstention-callout">
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <span class="abstention-label">Workflow Recommendation:</span>
+                        <span class="abstention-badge">${escapeHtml(as.abstention_reason || "REVIEW_REQUIRED_LOW_CONFIDENCE")}</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-dim); text-align: right;">
+                        Calibration Status: <strong>${escapeHtml(as.confidence_calibration_status || "UNCALIBRATED_DETERMINISTIC_HEURISTIC")}</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: KEY FINDINGS (POLARITY PARTITIONED) -->
+        <section class="report-section" id="reportSecFindings">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">03</span>
+                    <h3 class="report-section-title">Key Findings (Polarity Partitioned)</h3>
+                </div>
+                <span style="font-size: 11px; color: var(--text-dim);">Presentation-Only Deterministic Ordering</span>
+            </div>
+
+            <!-- RISK-INCREASING FINDINGS -->
+            <div class="findings-group-title risk-inc">
+                <span>🔴 Risk-Increasing Findings (${(report.risk_increasing_findings || []).length})</span>
+            </div>
+            <div class="findings-list">
+                ${renderFindingsGroup(report.risk_increasing_findings, "risk-increasing")}
+            </div>
+
+            <!-- RISK-REDUCING FINDINGS -->
+            <div class="findings-group-title risk-red" style="margin-top: 16px;">
+                <span>🟢 Risk-Reducing Findings (${(report.risk_reducing_findings || []).length})</span>
+            </div>
+            <div class="findings-list">
+                ${renderFindingsGroup(report.risk_reducing_findings, "risk-reducing")}
+            </div>
+
+            <!-- NEUTRAL OBSERVATIONS -->
+            <div class="findings-group-title neutral" style="margin-top: 16px;">
+                <span>⚪ Neutral Baseline Telemetry (${(report.neutral_observations || []).length})</span>
+            </div>
+            <div class="findings-list">
+                ${renderFindingsGroup(report.neutral_observations, "neutral")}
+            </div>
+        </section>
+
+        <!-- SECTION 4: EVIDENCE-BACKED REASONING & GROUNDING (AERE) -->
+        <section class="report-section" id="reportSecReasoning">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">04</span>
+                    <h3 class="report-section-title">Evidence-Backed Qualitative Reasoning (AERE)</h3>
+                </div>
+                <span class="header-badge">Status: ${escapeHtml((report.aere_reasoning_status || "unavailable").toUpperCase())}</span>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 8px; padding: 16px; line-height: 1.6; font-size: 13px;">
+                <strong style="color: var(--accent-cyan);">Investigation Summary:</strong>
+                <p style="margin-top: 6px; color: var(--text-main);">${escapeHtml(report.investigation_summary || "No investigation summary available.")}</p>
+            </div>
+
+            ${(report.detailed_findings && report.detailed_findings.length > 0) ? `
+                <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Detailed Findings:</span>
+                    ${report.detailed_findings.map(f => `
+                        <div class="claim-card">
+                            <div class="claim-header">
+                                <span class="claim-title">${escapeHtml(f.topic || f.finding_id || "Finding")}</span>
+                                <span class="finding-badge ${escapeHtml(f.forensic_significance || 'info')}">${escapeHtml(f.forensic_significance || 'info')}</span>
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-main);">${escapeHtml(f.summary || "")}</div>
+                            <div style="font-size: 12px; color: var(--text-muted); font-style: italic;">${escapeHtml(f.interpretation || "")}</div>
+                            <div style="font-size: 11px; color: var(--text-dim);">
+                                Grounded Evidence IDs: ${(f.grounded_evidence_ids || []).map(eid => `<a href="javascript:void(0)" class="finding-id-pill" onclick="highlightLineageItem('${escapeHtml(eid)}')">${escapeHtml(eid)}</a>`).join(" ")}
+                            </div>
+                        </div>
+                    `).join("")}
+                </div>
+            ` : ""}
+
+            <!-- GROUNDED CLAIMS CITATION EVALUATION -->
+            <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Citation Grounding Diagnostics:</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">Grounded Citation Ratio: <strong>${(Number(report.grounded_citation_ratio || 1.0) * 100).toFixed(1)}%</strong> | Unsubstantiated Claims: <strong>${report.unsubstantiated_claims_count || 0}</strong></span>
+                </div>
+                ${(report.grounded_claims && report.grounded_claims.length > 0) ? `
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        ${report.grounded_claims.map(gc => `
+                            <div class="claim-card">
+                                <div class="claim-header">
+                                    <span class="claim-title">[${escapeHtml(gc.claim_id || "CLAIM")}] Section: ${escapeHtml(gc.section || "general")}</span>
+                                    <span class="status-badge-${escapeHtml((gc.grounding_status || 'uncertain').toLowerCase())}">${escapeHtml(gc.grounding_status || 'UNCERTAIN')}</span>
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-dim); display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <span>Valid Citations: ${(gc.valid_evidence_ids || []).map(eid => `<a href="javascript:void(0)" class="finding-id-pill" onclick="highlightLineageItem('${escapeHtml(eid)}')">${escapeHtml(eid)}</a>`).join(" ") || "None"}</span>
+                                    ${(gc.invalid_evidence_ids && gc.invalid_evidence_ids.length > 0) ? `
+                                        <span class="invalid-citation-tag">INVALID CITATIONS: ${(gc.invalid_evidence_ids).map(eid => escapeHtml(eid)).join(", ")}</span>
+                                    ` : ""}
+                                </div>
+                                ${(gc.issues && gc.issues.length > 0) ? `
+                                    <div style="font-size: 11px; color: #fca5a5; line-height: 1.4;">
+                                        Diagnostic Issues: ${gc.issues.map(iss => escapeHtml(iss)).join("; ")}
+                                    </div>
+                                ` : ""}
+                            </div>
+                        `).join("")}
+                    </div>
+                ` : `
+                    <div style="font-size: 12px; color: var(--text-dim);">No claim-level grounding evaluation records emitted.</div>
+                `}
+            </div>
+        </section>
+
+        <!-- SECTION 5: EVIDENCE LINEAGE & AUDIT TRAIL -->
+        <section class="report-section" id="reportSecLineage">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">05</span>
+                    <h3 class="report-section-title">Evidence Lineage &amp; Provenance Audit Trail</h3>
+                </div>
+                <span style="font-size: 11px; color: var(--text-dim);">Active Items: ${report.total_active_evidence_items || 0} | Provenance Gate: ${report.provenance_gate_passed ? "PASSED (G_prov=1)" : "FAILED (G_prov=0)"}</span>
+            </div>
+            <div class="lineage-table-wrapper">
+                <table class="lineage-table">
+                    <thead>
+                        <tr>
+                            <th>Evidence ID</th>
+                            <th>Agent / Source</th>
+                            <th>Severity</th>
+                            <th>Type</th>
+                            <th>Strength</th>
+                            <th>Polarity</th>
+                            <th>TCE Contribution</th>
+                            <th>Observation Finding</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(report.evidence_lineage && report.evidence_lineage.length > 0) ? report.evidence_lineage.map(item => `
+                            <tr id="lineage-row-${escapeHtml(item.evidence_id)}">
+                                <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan);">${escapeHtml(item.evidence_id)}</td>
+                                <td>${escapeHtml(item.agent_name || `Agent ${item.agent_id}`)}</td>
+                                <td><span class="finding-badge ${escapeHtml(item.severity || 'info')}">${escapeHtml(item.severity || 'info')}</span></td>
+                                <td style="color: var(--text-dim);">${escapeHtml(item.evidence_type || 'deterministic')}</td>
+                                <td>${Number(item.evidence_strength || 1.0).toFixed(2)}</td>
+                                <td style="font-weight: 600; color: ${item.polarity === 'risk_increasing' ? '#f87171' : item.polarity === 'risk_reducing' ? '#34d399' : 'var(--text-dim)'};">${escapeHtml((item.polarity || 'neutral').replace(/_/g, ' '))}</td>
+                                <td style="font-family: var(--font-mono); color: var(--accent-cyan);">${item.tce_final_contribution !== null && item.tce_final_contribution !== undefined ? Number(item.tce_final_contribution).toFixed(4) : "Unavailable"}</td>
+                                <td style="line-height: 1.4;">${escapeHtml(item.finding || "")}</td>
+                            </tr>
+                        `).join("") : `
+                            <tr><td colspan="8" style="text-align: center; color: var(--text-dim); padding: 20px;">No active evidence items in investigation ledger.</td></tr>
+                        `}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SECTION 6: CONTRADICTIONS & CROSS-AGENT CONFLICTS -->
+        <section class="report-section" id="reportSecContradictions">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">06</span>
+                    <h3 class="report-section-title">Contradictions &amp; Evidentiary Conflicts</h3>
+                </div>
+                <span style="font-size: 11px; color: var(--text-dim);">Penalty Score (Phi_contra): ${Number(report.contradiction_score || 0).toFixed(2)}</span>
+            </div>
+            ${(report.contradictions && report.contradictions.length > 0) ? `
+                <div class="contradictions-box">
+                    ${report.contradictions.map(c => `
+                        <div class="contradiction-item">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <strong style="color: #fbbf24; font-family: var(--font-mono); font-size: 12px;">${escapeHtml(c.relationship_id || "CONTRADICTION")}</strong>
+                                <span style="font-size: 11px; color: var(--text-dim);">${escapeHtml(c.description || "")}</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; font-size: 12px;">
+                                <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+                                    <span style="color: var(--accent-cyan); font-weight: 700;">[${escapeHtml(c.source_evidence_id)}]</span> ${escapeHtml(c.source_agent_name)}:
+                                    <div style="color: var(--text-main); margin-top: 2px;">${escapeHtml(c.source_finding)}</div>
+                                </div>
+                                <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+                                    <span style="color: #f87171; font-weight: 700;">[${escapeHtml(c.target_evidence_id)}]</span> ${escapeHtml(c.target_agent_name)}:
+                                    <div style="color: var(--text-main); margin-top: 2px;">${escapeHtml(c.target_finding)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join("")}
+                </div>
+            ` : `
+                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 14px; font-size: 13px; color: #34d399; display: flex; align-items: center; gap: 8px;">
+                    <span>✓ No cross-agent contradictory relationships detected in this investigation.</span>
+                </div>
+            `}
+        </section>
+
+        <!-- SECTION 7: TELEMETRY COVERAGE & EVIDENCE GAPS -->
+        <section class="report-section" id="reportSecTelemetry">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">07</span>
+                    <h3 class="report-section-title">Telemetry Coverage &amp; Evidence Gaps</h3>
+                </div>
+                <span style="font-size: 11px; color: var(--text-dim);">18 Operational Agent Dimensions</span>
+            </div>
+            <div class="telemetry-grid">
+                ${renderTelemetryNodes(report)}
+            </div>
+        </section>
+
+        <!-- SECTION 8: EPISTEMIC CONFIDENCE BREAKDOWN -->
+        <section class="report-section" id="reportSecConfidence">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">08</span>
+                    <h3 class="report-section-title">Deterministic Confidence Diagnostics (DHCI)</h3>
+                </div>
+                <span class="header-badge">UNCALIBRATED_DETERMINISTIC_HEURISTIC</span>
+            </div>
+            <div class="assessment-metrics-grid">
+                <div class="metric-card">
+                    <span class="metric-card-title">Telemetry Coverage (Phi_cov)</span>
+                    <span class="metric-card-value">${Number(report.telemetry_coverage_score || 0).toFixed(1)}%</span>
+                    <span class="metric-card-sub">Active Sensor Span</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-card-title">Source Reliability (Phi_rel)</span>
+                    <span class="metric-card-value">${Number(report.source_reliability_score || 0).toFixed(1)}%</span>
+                    <span class="metric-card-sub">Sensor Type Priors</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-card-title">Corroboration (Phi_cor)</span>
+                    <span class="metric-card-value">${Number(report.corroboration_score || 0).toFixed(1)}%</span>
+                    <span class="metric-card-sub">${report.concordant_cluster_count || 0} / 7 Concordant Clusters</span>
+                </div>
+                <div class="metric-card">
+                    <span class="metric-card-title">Contradiction Penalty (Phi_contra)</span>
+                    <span class="metric-card-value" style="color: ${Number(report.contradiction_score || 0) > 0 ? '#fbbf24' : '#ffffff'};">${Number(report.contradiction_score || 0).toFixed(1)}%</span>
+                    <span class="metric-card-sub">Evidentiary Conflict Impact</span>
+                </div>
+            </div>
+            ${(report.concordant_clusters && report.concordant_clusters.length > 0) ? `
+                <div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
+                    Active Concordant Clusters: <strong>${report.concordant_clusters.map(c => escapeHtml(c)).join(", ")}</strong>
+                </div>
+            ` : ""}
+        </section>
+
+        <!-- SECTION 9: METHODOLOGICAL DISCLAIMER -->
+        <section class="report-section" id="reportSecDisclaimer">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">09</span>
+                    <h3 class="report-section-title">Methodological Disclaimer</h3>
+                </div>
+                <span style="font-size: 11px; color: var(--text-dim);">Epistemic Principles</span>
+            </div>
+            <div class="disclaimer-card">
+                ${escapeHtml(report.methodological_disclaimer || "This report synthesizes deterministic multi-agent telemetry, non-linear trust/risk calculation (TCE), grounded qualitative reasoning (AERE), and deterministic heuristic confidence indexing. Risk, trust, and confidence represent epistemically distinct dimensions. Grounding validity confirms citation alignment with collected telemetry, not absolute objective truth. Confidence scores are uncalibrated prototype heuristics and must not be interpreted as frequentist or Bayesian probabilities.")}
+            </div>
+        </section>
+
+        <!-- SECTION 10: HUMAN REVIEW GUIDANCE & PROHIBITED ACTIONS -->
+        <section class="report-section" id="reportSecHumanReview">
+            <div class="report-section-header">
+                <div class="report-section-title-group">
+                    <span class="report-section-number">10</span>
+                    <h3 class="report-section-title">Human Review Guidance &amp; Operational Boundaries</h3>
+                </div>
+                <span style="font-size: 11px; color: #f87171; font-weight: 700;">Human-in-the-Loop Sovereign Boundary</span>
+            </div>
+            <div class="disclaimer-card" style="border-left: 4px solid var(--accent-cyan);">
+                <strong style="color: #ffffff;">Human Forensic Analyst Mandate:</strong>
+                <p style="margin-top: 4px;">${escapeHtml(report.human_review_guidance || "This report is an advisory artifact intended solely to support human forensic investigators. All findings, contradictions, and telemetry gaps must be reviewed by a qualified human analyst before making any operational, containment, or legal determination.")}</p>
+            </div>
+            <div class="prohibited-actions-box">
+                <span class="prohibited-title">⚠️ Prohibited Autonomous Enforcement Actions:</span>
+                <ul class="prohibited-list">
+                    ${(report.prohibited_autonomous_actions || [
+                        "Automated domain or IP blocking",
+                        "Automated account suspension or credential revocation",
+                        "Automated infrastructure modification or network routing alterations",
+                        "Automated legal takedown requests or external abuse dispatch"
+                    ]).map(act => `<li>${escapeHtml(act)}</li>`).join("")}
+                </ul>
+            </div>
+        </section>
+    `;
+
+    container.innerHTML = html;
+}
+
+/**
+ * Helper to render a group of findings with exact presentation ordering.
+ */
+function renderFindingsGroup(findings, polarityClass) {
+    if (!findings || findings.length === 0) {
+        return `<div style="font-size: 12px; color: var(--text-dim); padding: 8px 12px; background: rgba(15, 23, 42, 0.4); border-radius: 6px;">No ${polarityClass.replace(/-/g, " ")} findings recorded.</div>`;
+    }
+
+    return findings.map(f => `
+        <div class="finding-row-card ${polarityClass}">
+            <div class="finding-main-info">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <a href="javascript:void(0)" class="finding-id-pill" onclick="highlightLineageItem('${escapeHtml(f.evidence_id)}')" title="View in Evidence Lineage">${escapeHtml(f.evidence_id)}</a>
+                    <span style="font-size: 12px; font-weight: 700; color: #ffffff;">${escapeHtml(f.agent_name || `Agent ${f.agent_id}`)}</span>
+                    <span class="finding-badge ${escapeHtml(f.severity || 'info')}">${escapeHtml(f.severity || 'info')}</span>
+                    ${f.is_duplicate ? `<span style="font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(100,116,139,0.3); color: var(--text-dim);">DUP (${escapeHtml(f.original_evidence_id)})</span>` : ""}
+                </div>
+                <div class="finding-text">${escapeHtml(f.finding || "")}</div>
+                <div class="finding-meta-tags">
+                    <span>Type: <strong>${escapeHtml(f.evidence_type || 'deterministic')}</strong></span>
+                    <span>Strength: <strong>${Number(f.evidence_strength || 1.0).toFixed(2)}</strong></span>
+                    <span>Category: <strong>${escapeHtml(f.category || 'general')}</strong></span>
+                </div>
+            </div>
+            <div style="text-align: right; min-width: 120px;">
+                <div style="font-size: 10px; color: var(--text-dim); text-transform: uppercase;">TCE Contribution</div>
+                <div class="tce-contrib-tag">${f.tce_contribution !== null && f.tce_contribution !== undefined ? Number(f.tce_contribution).toFixed(4) : "Unavailable"}</div>
+            </div>
+        </div>
+    `).join("");
+}
+
+/**
+ * Helper to render 18 telemetry nodes.
+ */
+function renderTelemetryNodes(report) {
+    const observed = new Set(report.observed_dimensions || []);
+    const gaps = report.inactive_telemetry_gaps || {};
+
+    return AGENT_METADATA.map(agent => {
+        const agentKey = `A${agent.id}`;
+        const isObserved = observed.has(agentKey) || observed.has(agent.name) || observed.has(String(agent.id));
+        const gapReason = gaps[agentKey] || gaps[agent.name] || gaps[String(agent.id)];
+
+        let stateClass = "unobserved";
+        let stateLabel = "Telemetry Gap";
+
+        if (isObserved) {
+            // Check if active or clean
+            const res = agentResults[agent.id];
+            if (res && res.evidence && res.evidence.length > 0) {
+                stateClass = "active";
+                stateLabel = "Active Evidence";
+            } else {
+                stateClass = "clean";
+                stateLabel = "Clean Observation";
+            }
+        } else {
+            stateClass = "unobserved";
+            stateLabel = gapReason ? "Inactive / Skipped" : "Unobserved";
+        }
+
+        return `
+            <div class="telemetry-node ${stateClass}" title="${escapeHtml(gapReason || agent.desc)}">
+                <div style="display: flex; flex-direction: column;">
+                    <span class="telemetry-name">A${String(agent.id).padStart(2, "0")}: ${escapeHtml(agent.name)}</span>
+                    ${gapReason ? `<span style="font-size: 10px; color: var(--text-dim); word-break: break-all;">${escapeHtml(gapReason)}</span>` : ""}
+                </div>
+                <span class="telemetry-status-pill ${stateClass}">${stateLabel}</span>
+            </div>
+        `;
+    }).join("");
+}
+
+/**
+ * Scroll to and highlight an evidence item in the Evidence Lineage table.
+ */
+function highlightLineageItem(evidenceId) {
+    const row = document.getElementById(`lineage-row-${evidenceId}`);
+    if (!row) return;
+
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("highlighted");
+    setTimeout(() => {
+        row.classList.remove("highlighted");
+    }, 2500);
+}
+
+/**
+ * Export the current InvestigatorReportPayload as a JSON file.
+ */
+function exportInvestigatorReportJson() {
+    if (!currentReportPayload) {
+        alert("No report payload available to export.");
+        return;
+    }
+
+    const jsonStr = JSON.stringify(currentReportPayload, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const invId = (currentReportPayload.overview && currentReportPayload.overview.investigation_id) ? currentReportPayload.overview.investigation_id : "dossier";
+    a.href = url;
+    a.download = `investigator-report-${invId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Print the report or save as PDF.
+ */
+function printInvestigatorReport() {
+    window.print();
 }
 
 

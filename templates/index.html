@@ -162,6 +162,15 @@
                 </div>
             </div>
 
+            <!-- FINAL INVESTIGATOR REPORT ACTION CARD -->
+            <div class="report-cta-card" id="reportCtaContainer" style="display: none;">
+                <button id="viewReportBtn" class="btn-view-report" onclick="openInvestigatorReport()">
+                    <span class="report-btn-icon">📋</span>
+                    <span>View Final Investigator Report</span>
+                </button>
+                <div class="report-cta-sub">Post-hoc synthesis across 18 agents, TCE, AERE &amp; DHCI</div>
+            </div>
+
             <!-- ACTIVE EVIDENCE COLLECTION CHECKLIST -->
             <div class="sidebar-section">
                 <div class="sidebar-title">Active Forensic Agents</div>
@@ -176,15 +185,56 @@
                 <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
                     <div>✓ <strong>Step 1:</strong> Input Ingestion (URL or QR Code)</div>
                     <div>✓ <strong>Step 2:</strong> 18 Isolated Forensic Agents</div>
-                    <div>✓ <strong>Step 3:</strong> Evidence Collection &amp; Display</div>
-                    <div style="opacity: 0.5;">○ <strong>Step 4:</strong> Feature Extraction &amp; Normalization</div>
-                    <div style="opacity: 0.5;">○ <strong>Step 5:</strong> Multi-Agent Evidence Fusion</div>
-                    <div style="opacity: 0.5;">○ <strong>Step 6:</strong> Trust Score &amp; Explainability</div>
+                    <div>✓ <strong>Step 3:</strong> Evidence Ledger Normalization</div>
+                    <div>✓ <strong>Step 4:</strong> Trust Engine &amp; Confidence Engine</div>
+                    <div>✓ <strong>Step 5:</strong> Final Investigator Report Dossier</div>
                 </div>
             </div>
 
         </aside>
 
+    </div>
+
+    <!-- FINAL INVESTIGATOR REPORT MODAL / DOSSIER VIEW (STEP 5C) -->
+    <div id="investigatorReportModal" class="report-modal-backdrop" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+        <div class="report-modal-container">
+            <!-- STICKY HEADER TOOLBAR -->
+            <div class="report-modal-header">
+                <div class="report-header-left">
+                    <div class="report-header-badge">FORENSIC DOSSIER</div>
+                    <h2 id="reportModalTitle" class="report-header-title">Final Investigator Report</h2>
+                    <span id="reportModalSubtitle" class="report-header-sub">Multi-Agent Digital Forensics &amp; Evidence Reasoning System</span>
+                </div>
+                <div class="report-header-actions">
+                    <button id="reportPrintBtn" class="report-action-btn" onclick="printInvestigatorReport()" title="Print or Save PDF">
+                        <span>🖨️ Print / Save PDF</span>
+                    </button>
+                    <button id="reportExportJsonBtn" class="report-action-btn" onclick="exportInvestigatorReportJson()" title="Export JSON Dossier">
+                        <span>💾 Export JSON</span>
+                    </button>
+                    <button id="reportCloseBtn" class="report-close-btn" onclick="closeInvestigatorReport()" aria-label="Close report modal">✕</button>
+                </div>
+            </div>
+
+            <!-- REPORT LOADING STATE -->
+            <div id="reportLoadingState" class="report-loading-container" style="display: none;">
+                <div class="report-spinner"></div>
+                <div class="report-loading-text">Generating Final Investigator Report...</div>
+                <div class="report-loading-sub">Synthesizing 18-agent telemetry, TCE risk/trust calculations, AERE reasoning, and DHCI epistemic confidence metrics.</div>
+            </div>
+
+            <!-- REPORT ERROR STATE -->
+            <div id="reportErrorState" class="report-error-container" style="display: none;">
+                <div class="report-error-icon">⚠️</div>
+                <div id="reportErrorText" class="report-error-text">Final Investigator Report could not be generated.</div>
+                <button class="report-retry-btn" onclick="fetchAndRenderReport()">Retry</button>
+            </div>
+
+            <!-- REPORT CONTENT DOSSIER -->
+            <div id="reportContentContainer" class="report-dossier-body" style="display: none;">
+                <!-- Rendered dynamically by static/js/app.js -->
+            </div>
+        </div>
     </div>
 
     <!-- SCRIPTS -->
