@@ -7,6 +7,7 @@ Step 6C-4: Independent ground-truth verification records.
 Step 6C-5: Threat Intelligence (TI) overlap metadata recording.
 Step 6C-6: Reproducible benchmark snapshot, manifest, and integrity hashing.
 Step 6C-7: Cross-split leakage, temporal exposure, identity, and snapshot integrity audit.
+Step 6D-2: Candidate harvesting and raw candidate pool layer.
 """
 
 from .schemas import (
@@ -68,7 +69,7 @@ from .qr_relationships import (
 )
 
 from .ground_truth_verifier import (
-    SourceType,
+    SourceType as GTSourceType,
     VerificationSourceRecord,
     AdjudicationRecord,
     GroundTruthVerificationResult,
@@ -108,6 +109,23 @@ from .integrity_auditor import (
     audit_ti_observation_records,
     audit_benchmark_records,
     audit_benchmark_snapshot,
+)
+
+from .harvester import (
+    SourceType,
+    RetrievalStatus,
+    RawCandidate,
+    SourceHarvestReport,
+    HarvestingResult,
+    compute_candidate_id,
+    BaseSourceAdapter,
+    TextListFeedAdapter,
+    JSONFeedAdapter,
+    CSVFeedAdapter,
+    QRImageSourceAdapter,
+    QRPayloadSourceAdapter,
+    CustomSourceAdapter,
+    CandidateHarvester,
 )
 
 __all__ = [
@@ -161,7 +179,7 @@ __all__ = [
     "analyze_qr_direct_relationship",
     "correlate_qr_and_direct_records",
     # Ground Truth Verification
-    "SourceType",
+    "GTSourceType",
     "VerificationSourceRecord",
     "AdjudicationRecord",
     "GroundTruthVerificationResult",
@@ -192,4 +210,19 @@ __all__ = [
     "audit_ti_observation_records",
     "audit_benchmark_records",
     "audit_benchmark_snapshot",
+    # Candidate Harvester
+    "SourceType",
+    "RetrievalStatus",
+    "RawCandidate",
+    "SourceHarvestReport",
+    "HarvestingResult",
+    "compute_candidate_id",
+    "BaseSourceAdapter",
+    "TextListFeedAdapter",
+    "JSONFeedAdapter",
+    "CSVFeedAdapter",
+    "QRImageSourceAdapter",
+    "QRPayloadSourceAdapter",
+    "CustomSourceAdapter",
+    "CandidateHarvester",
 ]

@@ -353,6 +353,30 @@ The auditor evaluates four primary categories of potential anomalies:
 * **No Automatic Repair:** The auditor never mutates input records, partitions, labels, or manifest files.
 * **Offline Boundary:** Zero network access, zero production pipeline imports.
 
+---
+
+## 16. Candidate Harvesting & Raw Candidate Pool (Step 6D-2)
+
+### 16.1 Objective & Methodological Firewalls
+The candidate harvesting layer (`tools/benchmark/harvester.py`) aggregates raw potential benchmark inputs from approved, documented sources (public malicious feeds, phishing datasets, research collections, benign curated lists, and static QR image archives).
+
+* **Ground-Truth Firewall:** The harvester gathers raw inputs and preserves source claims as descriptive metadata. It **NEVER** assigns `BENIGN` or `MALICIOUS` ground-truth labels, which are strictly owned by Step 6D-4 independent verification.
+* **Production Segregation:** Zero imports or dependencies on TCE, AERE, Confidence Engine, or Agents A1–A18.
+* **Loss-Minimizing Provenance:** Candidates across all sources are retained with complete source attribution (`source_name`, `source_record_id`, `source_reference`, `first_observed_timestamp`, `harvest_timestamp`). Exact duplicates across sources are counted in diagnostics but preserved in the raw pool.
+* **Raw Artifact Preservation:** Raw observed URLs (with casing, ports, queries, and fragments intact), QR image paths, and raw barcode payload text are preserved verbatim without premature canonicalization.
+* **Research Safety:** Operates passively without dynamic browser automation, JavaScript execution, login attempts, or local malware detonation. Non-HTTP schemes (`mailto:`, `wifi:`, `smsto:`, `intent:`) are stored as passive text.
+
+### 16.2 Source Adapter Architecture
+* `BaseSourceAdapter`: Abstract interface defining uniform `harvest(source_input) -> Tuple[List[RawCandidate], SourceHarvestReport]`.
+* `TextListFeedAdapter`: Ingests newline-delimited URL or payload feeds.
+* `JSONFeedAdapter`: Ingests JSON arrays and JSONL feeds with customizable schema field mapping.
+* `CSVFeedAdapter`: Ingests tabular CSV data with customizable column mapping.
+* `QRImageSourceAdapter`: Ingests directories or manifests of static QR barcode image files (`QR_IMAGE`).
+* `QRPayloadSourceAdapter`: Ingests extracted text payloads (`QR_PAYLOAD`).
+* `CustomSourceAdapter`: Wraps custom parsing callables.
+* `CandidateHarvester`: Orchestrator managing multiple adapters, tracking source availability/errors, and aggregating `HarvestingResult`.
+
+
 
 
 
