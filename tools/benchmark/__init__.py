@@ -8,6 +8,7 @@ Step 6C-5: Threat Intelligence (TI) overlap metadata recording.
 Step 6C-6: Reproducible benchmark snapshot, manifest, and integrity hashing.
 Step 6C-7: Cross-split leakage, temporal exposure, identity, and snapshot integrity audit.
 Step 6D-2: Candidate harvesting and raw candidate pool layer.
+Step 6D-3: Passive liveness and candidate eligibility layer.
 """
 
 from .schemas import (
@@ -128,6 +129,21 @@ from .harvester import (
     CandidateHarvester,
 )
 
+from .liveness import (
+    LivenessStatus,
+    EligibilityStatus,
+    LivenessFailureReason,
+    HTTPResponseObservation,
+    BaseHTTPTransport,
+    MockHTTPTransport,
+    RequestsHTTPTransport,
+    LivenessEvaluation,
+    LivenessBatchResult,
+    PassiveLivenessEvaluator,
+    evaluate_candidate_liveness,
+    evaluate_batch_liveness,
+)
+
 __all__ = [
     # Schemas
     "InputModality",
@@ -225,4 +241,17 @@ __all__ = [
     "QRPayloadSourceAdapter",
     "CustomSourceAdapter",
     "CandidateHarvester",
+    # Passive Liveness & Eligibility
+    "LivenessStatus",
+    "EligibilityStatus",
+    "LivenessFailureReason",
+    "HTTPResponseObservation",
+    "BaseHTTPTransport",
+    "MockHTTPTransport",
+    "RequestsHTTPTransport",
+    "LivenessEvaluation",
+    "LivenessBatchResult",
+    "PassiveLivenessEvaluator",
+    "evaluate_candidate_liveness",
+    "evaluate_batch_liveness",
 ]

@@ -376,6 +376,45 @@ The candidate harvesting layer (`tools/benchmark/harvester.py`) aggregates raw p
 * `CustomSourceAdapter`: Wraps custom parsing callables.
 * `CandidateHarvester`: Orchestrator managing multiple adapters, tracking source availability/errors, and aggregating `HarvestingResult`.
 
+---
+
+## 17. Passive Liveness & Candidate Eligibility (Step 6D-3)
+
+### 17.1 Purpose & Methodological Guarantees
+The passive liveness and candidate eligibility layer (`tools/benchmark/liveness.py`) deterministically evaluates harvested candidate inputs to determine whether they meet the technical criteria for downstream benchmark processing.
+
+> **CRITICAL METHODOLOGICAL MANDATES:**
+> 1. **Liveness/eligibility is not ground truth.**
+> 2. **HTTP availability or response-body size must not be interpreted as benign or malicious ground truth.**
+> 3. HTTP 200 $\neq$ Benign; HTTP 404 $\neq$ Malicious; HTTP 500 $\neq$ Malicious; Timeout $\neq$ Benign; Empty body $\neq$ Malicious.
+> 4. Threat-feed presence or absence must NEVER be consulted during liveness evaluation.
+> 5. Zero ground-truth labels (`PrimaryOutcome.BENIGN`, `PrimaryOutcome.MALICIOUS`, `PrimaryOutcome.AMBIGUOUS`) are assigned in this stage.
+
+### 17.2 Liveness Criterion ($\ge 100$ Bytes Raw Body)
+For `DIRECT_URL` candidates:
+* **Passive HTTP/HTTPS Retrieval:** Evaluated using bounded HTTP GET/HEAD streaming.
+* **Criterion:** A candidate is deemed `LIVE` and `ELIGIBLE` if the raw HTTP response body contains at least **100 bytes** ($\ge 100$ bytes).
+* **Body $< 100$ Bytes:** Classified as `NOT_LIVE` and `INELIGIBLE` (`BODY_BELOW_THRESHOLD` or `EMPTY_BODY`). Crucially, a response body below 100 bytes does **not** become malicious.
+* **Status Code Independence:** Status codes (e.g. 200, 404, 500) are recorded purely as telemetry; an HTTP 404 or 500 response with $\ge 100$ bytes satisfies the liveness byte criterion while remaining label-agnostic.
+
+### 17.3 Transport, TLS, and Network Safety
+* **Default TLS Verification:** TLS certificate validation is enabled by default (`verify_tls=True`). Certificate validation failures are recorded as `TLS_VERIFICATION_FAILED` (`tls_status="failed"`). No silent fallback to unverified TLS or automatic insecure retries is permitted.
+* **Bounded Redirects:** Follows a bounded redirect policy (default `max_redirects=3`). Complete redirect histories are recorded (`redirect_chain`) without collapsing or mutating the original candidate artifact identity.
+* **Bounded Resources:** Network operations enforce strict socket timeouts (default 5.0s) and bounded response stream consumption (default 1 MB max read) to prevent resource exhaustion.
+* **Passive Only:** Zero headless browser automation, zero JavaScript execution, zero DOM rendering, zero form submission, zero port scanning, zero vulnerability probing, and zero crawling.
+
+### 17.4 Modality Handling & Scheme Safety
+* **`QR_IMAGE` Modality:** Static image files represent passive artifacts. The liveness layer does **not** decode QR barcodes or execute payloads. Assigned `LivenessStatus.NOT_APPLICABLE` and `EligibilityStatus.ELIGIBLE` with reason `NON_NETWORK_MODALITY`.
+* **`QR_PAYLOAD` Modality:** Static payload strings. Non-HTTP schemes (`mailto:`, `smsto:`, `tel:`, `wifi:`, `data:`, `javascript:`, `file:`, `intent:`) are safely classified as `LivenessStatus.NOT_APPLICABLE` and `EligibilityStatus.NOT_APPLICABLE` with `UNSUPPORTED_SCHEME`. Zero OS handler invocations, zero URI launching, and zero dynamic execution.
+* **HTTP/HTTPS QR Payloads:** Preserved as static target URLs for downstream stages without active browser detonation.
+
+### 17.5 Controlled Vocabularies & Serialization
+* **`LivenessStatus`:** `LIVE`, `NOT_LIVE`, `UNKNOWN`, `NOT_APPLICABLE`.
+* **`EligibilityStatus`:** `ELIGIBLE`, `INELIGIBLE`, `UNKNOWN`, `NOT_APPLICABLE`.
+* **`LivenessFailureReason`:** `NONE`, `BODY_BELOW_THRESHOLD`, `EMPTY_BODY`, `HTTP_ERROR`, `DNS_FAILURE`, `CONNECTION_TIMEOUT`, `CONNECTION_REFUSED`, `TLS_VERIFICATION_FAILED`, `MALFORMED_URL`, `UNSUPPORTED_SCHEME`, `NON_NETWORK_MODALITY`, `RETRIEVAL_ERROR`, `UNAVAILABLE`, `MISSING_ARTIFACT`.
+* **Schema Interoperability:** Converts directly into canonical `LivenessMetadata` for downstream `BenchmarkRecord` construction.
+
+
 
 
 
