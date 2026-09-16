@@ -171,6 +171,15 @@ from .evaluator import (
     evaluate_benchmark_suite,
 )
 
+from .dataset_assembler import (
+    DatasetAssemblyGateStatus,
+    DatasetAssemblyConfig,
+    DatasetAssemblyDiagnostics,
+    DatasetAssemblyGateResult,
+    DatasetAssemblyResult,
+    DatasetAssembler,
+)
+
 __all__ = [
     # Schemas
     "InputModality",
@@ -304,4 +313,11 @@ __all__ = [
     "compute_odds_ratio",
     "compute_risk_band_name",
     "evaluate_benchmark_suite",
+    # Dataset Assembly & Pre-Run Gate
+    "DatasetAssemblyGateStatus",
+    "DatasetAssemblyConfig",
+    "DatasetAssemblyDiagnostics",
+    "DatasetAssemblyGateResult",
+    "DatasetAssemblyResult",
+    "DatasetAssembler",
 ]

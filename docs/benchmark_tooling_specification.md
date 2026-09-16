@@ -485,6 +485,28 @@ The experimental evaluation layer (`tools/benchmark/evaluator.py`) evaluates can
 * **Effect Sizes:** Cohen's $d$ and Odds Ratios with Haldane-Anscombe zero-cell correction.
 * **Reproducibility:** Serializes complete machine-readable `BenchmarkEvaluationSuiteResult` dictionaries with dataset and manifest cryptographic digests.
 
+---
+
+## 20. Experimental Dataset Assembly & Pre-Run Gate (Step 6D-6)
+
+### 20.1 Purpose & Orchestration Layer
+The dataset assembly layer (`tools/benchmark/dataset_assembler.py`) orchestrates the components of the frozen benchmark tooling (Steps 6C and 6D-1 through 6D-5) into a unified, reproducible dataset assembly engine and pre-run validation gate:
+* **Input Ingestion:** Ingests raw candidate artifacts from Step 6D-2 without live harvesting.
+* **Eligibility Integration:** Incorporates passive liveness telemetry from Step 6D-3 ($\ge 100$ byte threshold, default TLS verification).
+* **Identity & Normalization:** Applies Step 6C-2 canonical normalization and computes the four-level identity hierarchy (`ART-`, `TGT-`, `GRP-`, `REC-`).
+* **Cross-Modal Linking:** Integrates Step 6C-3 QR relationship linking with co-partitioning constraints.
+* **Ground-Truth Attachment:** Attaches independent multi-source verification from Step 6D-4 with zero internal system contamination.
+* **Threat Intelligence Metadata:** Attaches Step 6C-5 controlled TI overlap observations ($\text{NONE} \not\equiv \text{Benign}$).
+* **Ambiguity Preservation:** Retains disputed and unverifiable candidates in the Ambiguity Pool.
+* **Deterministic Partitioning:** Allocates records across `DEVELOPMENT_CALIBRATION` (30%), `VALIDATION` (20%), `FINAL_TEST` (30%), and `PROSPECTIVE_HOLDOUT` (20%) using deterministic group-cluster hashing.
+* **Snapshot Generation & Integrity Auditing:** Serializes `records.jsonl` and `manifest.json` via Step 6C-6 and verifies integrity via Step 6C-7 `IntegrityAuditor`.
+
+### 20.2 Pre-Run Quality Gates
+Evaluates strict quality criteria and emits a definitive status:
+* **`READY_FOR_EXPERIMENT`:** 100% schema-valid records, valid identity prefixes, verified ground truth, 0 critical/error audit findings, zero cross-partition target leakage, zero cross-partition QR/direct leakage, and verified cryptographic snapshot digests.
+* **`BLOCKED_FROM_EXPERIMENT`:** Immediate blocking upon any critical leakage, ground-truth self-labeling, prospective chronology violations, or hash mismatches.
+
+
 
 
 
