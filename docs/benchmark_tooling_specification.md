@@ -409,15 +409,56 @@ For `DIRECT_URL` candidates:
 * **HTTP/HTTPS QR Payloads:** Preserved as static target URLs for downstream stages without active browser detonation.
 
 ### 17.5 Controlled Vocabularies & Serialization
-* **`LivenessStatus`:** `LIVE`, `NOT_LIVE`, `UNKNOWN`, `NOT_APPLICABLE`.
-* **`EligibilityStatus`:** `ELIGIBLE`, `INELIGIBLE`, `UNKNOWN`, `NOT_APPLICABLE`.
-* **`LivenessFailureReason`:** `NONE`, `BODY_BELOW_THRESHOLD`, `EMPTY_BODY`, `HTTP_ERROR`, `DNS_FAILURE`, `CONNECTION_TIMEOUT`, `CONNECTION_REFUSED`, `TLS_VERIFICATION_FAILED`, `MALFORMED_URL`, `UNSUPPORTED_SCHEME`, `NON_NETWORK_MODALITY`, `RETRIEVAL_ERROR`, `UNAVAILABLE`, `MISSING_ARTIFACT`.
-* **Schema Interoperability:** Converts directly into canonical `LivenessMetadata` for downstream `BenchmarkRecord` construction.
+* `LivenessStatus`: `LIVE`, `NOT_LIVE`, `UNKNOWN`, `NOT_APPLICABLE`.
+* `EligibilityStatus`: `ELIGIBLE`, `INELIGIBLE`, `UNKNOWN`, `NOT_APPLICABLE`.
+* `LivenessFailureReason`: `NONE`, `BODY_BELOW_THRESHOLD`, `EMPTY_BODY`, `HTTP_ERROR`, `DNS_FAILURE`, `CONNECTION_TIMEOUT`, `CONNECTION_REFUSED`, `TLS_VERIFICATION_FAILED`, `MALFORMED_URL`, `UNSUPPORTED_SCHEME`, `NON_NETWORK_MODALITY`, `RETRIEVAL_ERROR`, `UNAVAILABLE`, `MISSING_ARTIFACT`.
+* `Schema Interoperability`: Converts directly into canonical `LivenessMetadata` for downstream `BenchmarkRecord` construction.
 
+---
 
+## 18. Independent Ground-Truth Verification (Step 6D-4)
 
+### 18.1 Purpose & Core Methodological Mandates
+The independent ground-truth verification layer (`tools/benchmark/ground_truth_verifier.py`) establishes verified benchmark labels solely through independent external evidence and explicit analyst adjudication.
 
+> **CRITICAL METHODOLOGICAL MANDATES:**
+> 1. **Ground truth is established independently of the system under evaluation.**
+> 2. **System-generated verdicts, risk scores, trust scores, AERE outputs, Confidence Engine outputs, and investigator reports are not valid ground-truth sources.**
+> 3. **Threat-intelligence presence or absence is not, by itself, equivalent to benchmark ground truth.**
+> 4. **Absence of threat detection $\neq$ Benign.** Lack of malicious evidence or feed absence never implies benign status.
+> 5. **Qualitative confidence only:** Verification confidence is strictly qualitative (`HIGH`, `MEDIUM`, `LOW`). Floating-point probabilities or statistical confidences are rejected.
+> 6. **Natural prevalence preserved:** No synthetic class rebalancing or artificial 50/50 padding.
 
+### 18.2 Independent Source Types & Provenance
+Approved external verification source types:
+* `AUTHORITATIVE_REGISTRY`: Official registrar, TLD registry, or ICANN records.
+* `CURATED_THREAT_FEED`: Verified threat repositories (e.g. curated feeds, APWG).
+* `INCIDENT_TAKEDOWN_RECORD`: Verified incident response, abuse desk, or law enforcement takedown notices.
+* `ANALYST_MANUAL_REVIEW`: Independent expert forensic examination.
+* `OFFICIAL_ORGANIZATION_RECORD`: Verified corporate or governmental entity records.
+* `MALWARE_SANDBOX_DETONATION`: Independent sandbox detonation telemetry.
+* `TRUSTED_BENIGN_CURATION`: Highly curated authoritative benign corpora (e.g., Tranco top lists).
+* `DOM_CERT_ANALYSIS`: Cryptographic certificate authority transparency logs.
+* `COMMUNITY_CONSENSUS`: Multi-analyst consensus platforms.
+
+### 18.3 Multi-Source Consensus & Conflict Handling
+* **Consensus Rule ($\ge 2$ Independent Sources):** When $\ge 2$ genuinely independent external sources agree on an outcome (`MALICIOUS` or `BENIGN`), the record is assigned `VerificationStatus.VERIFIED` with qualitative `VerificationConfidence.HIGH`.
+* **Single Source Evidence:** An uncorroborated single source receives `VerificationStatus.AMBIGUOUS` or qualitative `VerificationConfidence.MEDIUM` / `LOW`.
+* **Duplicate / Mirrored Sources:** Multiple observations from the same provider or duplicate feed submissions collapse into a single provider claim and do not satisfy the multi-source independence threshold.
+* **Conflicting Evidence:** If independent sources disagree (e.g. MALICIOUS vs BENIGN), the record is classified as `PrimaryOutcome.AMBIGUOUS` and `VerificationStatus.DISPUTED`. All conflicting references are preserved in `supporting_references` and `contradictory_references`.
+
+### 18.4 Human Analyst Adjudication
+Disputed or ambiguous candidates may be resolved through explicit human analyst review (`AdjudicationRecord`):
+* Requires `reviewer_id`, `adjudicated_outcome`, `adjudicated_categories`, `rationale`, `adjudication_timestamp`, and `confidence`.
+* Adjudication is strictly decoupled from the automated analysis pipeline under evaluation.
+
+### 18.5 Self-Labeling Protection & Guardrails
+* Rejects any verification source referencing internal system components (`TCE`, `AERE`, `ConfidenceEngine`, `ReportGenerator`, `analysis_pipeline`, `Agent 1`..`Agent 18`).
+* Rejected internal sources trigger the diagnostic code `INTERNAL_SYSTEM_SOURCE_REJECTED` and are excluded from consensus evaluation.
+
+### 18.6 Modality Separation & Ambiguity Pool
+* Preserves the structural boundaries between `QR_IMAGE`, `QR_PAYLOAD`, and `DIRECT_URL`. Non-HTTP QR schemes (`mailto:`, `wifi:`, `smsto:`, `intent:`) remain passive data and are not automatically labeled malicious.
+* Ambiguous and unverifiable records are retained in the canonical dataset's ambiguity pool rather than discarded or artificially forced into binary labels.
 
 
 

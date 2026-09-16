@@ -75,7 +75,9 @@ from .ground_truth_verifier import (
     AdjudicationRecord,
     GroundTruthVerificationResult,
     verify_ground_truth,
+    verify_candidate_ground_truth,
     attach_verified_ground_truth,
+    is_forbidden_system_source,
 )
 
 from .ti_overlap_recorder import (
@@ -200,7 +202,9 @@ __all__ = [
     "AdjudicationRecord",
     "GroundTruthVerificationResult",
     "verify_ground_truth",
+    "verify_candidate_ground_truth",
     "attach_verified_ground_truth",
+    "is_forbidden_system_source",
     # TI Overlap Recording
     "TIFeed",
     "TIObservationType",
