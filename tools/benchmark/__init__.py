@@ -9,6 +9,8 @@ Step 6C-6: Reproducible benchmark snapshot, manifest, and integrity hashing.
 Step 6C-7: Cross-split leakage, temporal exposure, identity, and snapshot integrity audit.
 Step 6D-2: Candidate harvesting and raw candidate pool layer.
 Step 6D-3: Passive liveness and candidate eligibility layer.
+Step 6D-4: Independent ground-truth verification.
+Step 6D-5: Experimental benchmark evaluation layer.
 """
 
 from .schemas import (
@@ -146,6 +148,29 @@ from .liveness import (
     evaluate_batch_liveness,
 )
 
+from .evaluator import (
+    ExperimentalCondition,
+    GroundingFidelityStatus,
+    SystemPrediction,
+    RiskBandContingencyTable,
+    EvaluationMetrics,
+    StatisticalComparisonResult,
+    ConditionEvaluationReport,
+    BenchmarkEvaluationSuiteResult,
+    BenchmarkEvaluator,
+    BaselineAdapter,
+    compute_binary_metrics,
+    compute_roc_auc,
+    compute_pr_auc,
+    compute_bootstrap_confidence_intervals,
+    compute_mcnemar_test,
+    compute_wilcoxon_signed_rank,
+    compute_cohens_d,
+    compute_odds_ratio,
+    compute_risk_band_name,
+    evaluate_benchmark_suite,
+)
+
 __all__ = [
     # Schemas
     "InputModality",
@@ -258,4 +283,25 @@ __all__ = [
     "PassiveLivenessEvaluator",
     "evaluate_candidate_liveness",
     "evaluate_batch_liveness",
+    # Experimental Benchmark Evaluation Layer
+    "ExperimentalCondition",
+    "GroundingFidelityStatus",
+    "SystemPrediction",
+    "RiskBandContingencyTable",
+    "EvaluationMetrics",
+    "StatisticalComparisonResult",
+    "ConditionEvaluationReport",
+    "BenchmarkEvaluationSuiteResult",
+    "BenchmarkEvaluator",
+    "BaselineAdapter",
+    "compute_binary_metrics",
+    "compute_roc_auc",
+    "compute_pr_auc",
+    "compute_bootstrap_confidence_intervals",
+    "compute_mcnemar_test",
+    "compute_wilcoxon_signed_rank",
+    "compute_cohens_d",
+    "compute_odds_ratio",
+    "compute_risk_band_name",
+    "evaluate_benchmark_suite",
 ]

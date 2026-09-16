@@ -460,5 +460,31 @@ Disputed or ambiguous candidates may be resolved through explicit human analyst 
 * Preserves the structural boundaries between `QR_IMAGE`, `QR_PAYLOAD`, and `DIRECT_URL`. Non-HTTP QR schemes (`mailto:`, `wifi:`, `smsto:`, `intent:`) remain passive data and are not automatically labeled malicious.
 * Ambiguous and unverifiable records are retained in the canonical dataset's ambiguity pool rather than discarded or artificially forced into binary labels.
 
+---
+
+## 19. Experimental Benchmark Evaluation Layer (Step 6D-5)
+
+### 19.1 Purpose & Experimental Architecture
+The experimental evaluation layer (`tools/benchmark/evaluator.py`) evaluates canonical benchmark predictions against frozen ground truth across all experimental conditions defined in the research protocol:
+* **Main Pipeline:** `M0` (Full Multi-Agent Digital Forensics System).
+* **Baselines:** `A0` (Static Lexical Heuristics), `A1` (Standalone Threat-Intelligence Feed Aggregate), `A2` (Unweighted Majority Voting), `A3` (Linear Additive Risk), `A4` (Standalone Monolithic Zero-Shot LLM).
+* **Ablation Conditions:** `M1` (A6 TI ablated), `M2` (A18 QR ablated), `M3` (A8 Dynamic Script ablated), `M4` (A9/A10 Brand & Visual ablated), `M5` (TCE Synergy ablated), `M6` (AERE Grounding Validator ablated).
+
+### 19.2 Protocol Invariants & Guardrails
+* **Ground-Truth Immutability:** Benchmark ground truth is read-only. AMBIGUOUS ground-truth records are strictly excluded from binary classification metrics and counted transparently in `excluded_ambiguous_count`.
+* **Partition Isolation:** Evaluates `DEVELOPMENT_CALIBRATION` (30%), `VALIDATION` (20%), `FINAL_TEST` (30%), and `PROSPECTIVE_HOLDOUT` (20%) strictly out-of-sample without parameter leakage.
+* **$5 \times 2$ Risk Band Contingency Table:** Evaluates full distribution across the five frozen TCE risk bands (`benign` $[0, 15)$, `low_risk` $[15, 35)$, `suspicious` $[35, 60)$, `high_risk` $[60, 80)$, `malicious` $[80, 100]$).
+* **Threat-Flagging Decision Boundary:** Positive class mapped to $R \ge 35.0$ (Suspicious $\cup$ High Risk $\cup$ Malicious); Negative class mapped to $R < 35.0$ (Benign $\cup$ Low Risk).
+* **Selective Classification & Abstention:** Evaluates Confidence Engine routing ($C_{ev} < 35.0$ as human investigator review abstention) and conditional balanced accuracy on retained cases ($C_{ev} \ge 35.0$).
+* **AERE Grounding Fidelity:** Tracks distribution of reasoning claims across `GROUNDED`, `PARTIALLY_GROUNDED`, `UNGROUNDED`, and `UNCERTAIN`.
+* **Incremental Diagnostic Contribution (IDC):** Computes $\text{IDC}_k = \text{Metric}(M_0) - \text{Metric}(M_k)$ as descriptive ablation diagnostic contribution (non-causal).
+
+### 19.3 Statistical Procedures
+* **95% Bootstrap Confidence Intervals:** Non-parametric bootstrap resampling ($B = 1000$ resamples with replacement, seed-controlled).
+* **Hypothesis Testing:** Paired McNemar tests (for binary classification shifts) and Wilcoxon signed-rank tests (for continuous risk score shifts).
+* **Effect Sizes:** Cohen's $d$ and Odds Ratios with Haldane-Anscombe zero-cell correction.
+* **Reproducibility:** Serializes complete machine-readable `BenchmarkEvaluationSuiteResult` dictionaries with dataset and manifest cryptographic digests.
+
+
 
 
