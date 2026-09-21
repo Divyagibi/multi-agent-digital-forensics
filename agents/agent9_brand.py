@@ -14,6 +14,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
+import ipaddress
 import urllib3
 import requests
 from bs4 import BeautifulSoup
@@ -23,6 +24,10 @@ from services.evidence_schema import create_evidence_item, build_agent_result
 try:
     from PIL import Image
     _PIL_AVAILABLE = True
+    try:
+        Image.MAX_IMAGE_PIXELS = 10_000_000
+    except Exception:
+        pass
 except ImportError:
     _PIL_AVAILABLE = False
 
@@ -50,6 +55,100 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    if url.startswith("data:image/"):
+        return True
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
+
+
+def _damerau_levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Calculate Damerau-Levenshtein distance between two strings,
+    supporting insertion, deletion, substitution, and transposition.
+    """
+    s1 = (s1 or "").lower()
+    s2 = (s2 or "").lower()
+    len1, len2 = len(s1), len(s2)
+
+    if s1 == s2:
+        return 0
+    if len1 == 0:
+        return len2
+    if len2 == 0:
+        return len1
+
+    d = [[0] * (len2 + 2) for _ in range(len1 + 2)]
+    maxdist = len1 + len2
+    d[0][0] = maxdist
+    for i in range(len1 + 1):
+        d[i + 1][0] = maxdist
+        d[i + 1][1] = i
+    for j in range(len2 + 1):
+        d[0][j + 1] = maxdist
+        d[1][j + 1] = j
+
+    last_row: Dict[str, int] = {}
+
+    for i in range(1, len1 + 1):
+        db = 0
+        for j in range(1, len2 + 1):
+            k = last_row.get(s2[j - 1], 0)
+            l = db
+            cost = 0 if s1[i - 1] == s2[j - 1] else 1
+            if cost == 0:
+                db = j
+
+            d[i + 1][j + 1] = min(
+                d[i][j + 1] + 1,       # deletion
+                d[i + 1][j] + 1,       # insertion
+                d[i][j] + cost,        # substitution
+                d[k][l] + (i - k - 1) + 1 + (j - l - 1)  # transposition
+            )
+        last_row[s1[i - 1]] = i
+
+    return d[len1 + 1][len2 + 1]
 
 # =====================================================================
 # KNOWN BRAND REFERENCE DATABASE (Passive evidence reference catalog)
@@ -267,7 +366,10 @@ def _extract_registered_domain(url: str) -> str:
             return ""
         if _TLDEXTRACT_AVAILABLE:
             ext = tldextract.extract(hostname)
-            reg_dom = getattr(ext, 'top_domain_under_public_suffix', None) or getattr(ext, 'registered_domain', '')
+            if hasattr(ext, "top_domain_under_public_suffix"):
+                reg_dom = ext.top_domain_under_public_suffix
+            else:
+                reg_dom = getattr(ext, 'registered_domain', '')
             if reg_dom:
                 return reg_dom.lower()
         parts = hostname.split(".")
@@ -354,8 +456,12 @@ def _dhash_similarity(hash1: str, hash2: str) -> float:
 # =====================================================================
 
 def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[str], Optional[str], Optional[BeautifulSoup], List[str]]:
-    """Fetch HTML page safely with strict size and timeout limits."""
+    """Fetch HTML page safely with strict size, SSRF and timeout limits."""
     errors = []
+    if not _is_safe_url(url):
+        errors.append("Blocked potentially unsafe/private URL (SSRF protection)")
+        return None, url, None, errors
+
     try:
         resp = session.get(
             url,
@@ -386,6 +492,10 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
         return None, url, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirected to potentially unsafe/private URL (SSRF protection)")
+        return None, final_url, None, errors
+
     try:
         content_chunks = []
         downloaded = 0
@@ -396,8 +506,12 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
                 errors.append(f"HTML response exceeded {MAX_HTML_SIZE} bytes; truncated")
                 break
         html_bytes = b"".join(content_chunks)
-        encoding = resp.encoding or "utf-8"
-        html_text = html_bytes.decode(encoding, errors="replace")
+        raw_enc = getattr(resp, "encoding", None)
+        encoding = raw_enc if isinstance(raw_enc, str) and raw_enc else "utf-8"
+        try:
+            html_text = html_bytes.decode(encoding, errors="replace")
+        except Exception:
+            html_text = html_bytes.decode("utf-8", errors="replace")
         soup = BeautifulSoup(html_text, "html.parser")
         return html_text, final_url, soup, errors
     except Exception as e:
@@ -406,8 +520,11 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
 
 
 def _download_image_safe(image_url: str, session: requests.Session) -> Tuple[Optional[bytes], Optional[str], Optional[Tuple[int, int]]]:
-    """Download an image safely enforcing size & format limits."""
+    """Download an image safely enforcing SSRF, size & format limits."""
     if not image_url or not image_url.startswith(("http://", "https://", "data:")):
+        return None, None, None
+
+    if not _is_safe_url(image_url):
         return None, None, None
 
     if image_url.startswith("data:image/"):
@@ -947,6 +1064,34 @@ def _compare_official_domain(
     comparison_data["submitted_domain"] = sub_dom
     comparison_data["official_domain"] = official_domains[0]
     comparison_data["same_domain"] = is_same
+    comparison_data["official_domain_match"] = is_same
+
+    # Typosquatting / Edit distance evaluation against official domains
+    min_edit_dist = None
+    closest_official = None
+    sub_sld = sub_dom.split(".")[0] if "." in sub_dom else sub_dom
+    for off_dom in official_domains:
+        off_sld = off_dom.split(".")[0] if "." in off_dom else off_dom
+        dist = _damerau_levenshtein_distance(sub_sld, off_sld)
+        if min_edit_dist is None or dist < min_edit_dist:
+            min_edit_dist = dist
+            closest_official = off_dom
+
+    if not is_same and min_edit_dist is not None:
+        is_typo = (1 <= min_edit_dist <= 2) and (len(sub_sld) >= 4)
+        comparison_data["typosquatting"] = {
+            "detected": is_typo,
+            "edit_distance": min_edit_dist,
+            "target_domain": closest_official,
+        }
+        if is_typo:
+            evidence_list.append(f"Potential typosquatting/lookalike domain detected (edit distance {min_edit_dist} to {closest_official})")
+    elif is_same:
+        comparison_data["typosquatting"] = {
+            "detected": False,
+            "edit_distance": 0,
+            "target_domain": official_domains[0],
+        }
 
     if is_same:
         evidence_list.append(f"Submitted domain ({sub_dom}) matches official domain for {primary_brand} ({official_domains[0]})")
@@ -1073,18 +1218,63 @@ def analyze_brand(url: str) -> Dict[str, Any]:
 
     # Step 10: Compile structured evidence items
     evidence = []
-    evidence.append(create_evidence_item("A9", 1, "Candidate brand identity detected", candidate_brands, severity="info", source="HTML brand text parser", evidence_type="deterministic", metadata=brand_names_result))
+    is_official = bool(candidate_brands) and (official_domain_result.get("same_domain") is True or official_domain_result.get("official_domain_match") is True)
+    evidence.append(create_evidence_item(
+        "A9", 1, "Candidate brand identity detected", candidate_brands,
+        severity="info", source="HTML brand text parser", evidence_type="deterministic",
+        metadata=brand_names_result,
+        category="established_brand_official_domain" if is_official else ("brand_name_impersonation" if candidate_brands else "server_banner_detected")
+    ))
     
-    dom_mismatch = official_domain_result.get("official_domain_match") is False
-    evidence.append(create_evidence_item("A9", 2, "Official brand domain mismatch", dom_mismatch, severity="high" if dom_mismatch else "info", source="Brand reference catalog", evidence_type="inference", evidence_strength=0.90 if dom_mismatch else None, metadata=official_domain_result))
+    primary_brand_claims = [
+        b for b in brand_names_result.get("candidate_brands", [])
+        if any(loc in ("Page title", "OpenGraph site_name", "OpenGraph title") for loc in b.get("evidence", []))
+    ]
+    is_typosquatting = official_domain_result.get("typosquatting", {}).get("detected", False)
+    dom_mismatch = bool(primary_brand_claims or is_typosquatting) and (
+        (official_domain_result.get("same_domain") is False) or (official_domain_result.get("official_domain_match") is False)
+    )
+    evidence.append(create_evidence_item(
+        "A9", 2, "Official brand domain mismatch" if dom_mismatch else "Domain matches official brand identity or independent third party", dom_mismatch,
+        severity="high" if dom_mismatch else "info", source="Brand reference catalog",
+        evidence_type="inference", evidence_strength=0.90 if dom_mismatch else None,
+        metadata=official_domain_result,
+        category="brand_domain_mismatch" if dom_mismatch else "established_brand_official_domain"
+    ))
     
     logo_matches = logo_sim_result.get("matches", [])
     max_sim = max([m.get("similarity_score", 0.0) for m in logo_matches], default=0.0)
-    evidence.append(create_evidence_item("A9", 3, "Logo visual similarity match", max_sim, severity="high" if (max_sim > 0.8 and dom_mismatch) else "info", source="Image similarity analyzer", evidence_type="inference", evidence_strength=float(max_sim) if max_sim > 0 else None, metadata=logo_sim_result))
-    evidence.append(create_evidence_item("A9", 4, "Favicon similarity match", fav_sim_result.get("status"), severity="info", source="Favicon analyzer", evidence_type="inference", metadata=fav_sim_result))
-    evidence.append(create_evidence_item("A9", 5, "Brand color theme matching", color_result.get("status"), severity="info", source="DOM CSS parser", evidence_type="deterministic", metadata=color_result))
-    evidence.append(create_evidence_item("A9", 6, "Trademark ownership references", trademark_result.get("status"), severity="info", source="Brand reference catalog", evidence_type="deterministic", metadata=trademark_result))
-    evidence.append(create_evidence_item("A9", 7, "Brand layout structure similarity", layout_result.get("status"), severity="info", source="DOM layout analyzer", evidence_type="inference", metadata=layout_result))
+    evidence.append(create_evidence_item(
+        "A9", 3, "Logo visual similarity match", max_sim,
+        severity="high" if (max_sim > 0.8 and dom_mismatch) else "info", source="Image similarity analyzer",
+        evidence_type="inference", evidence_strength=float(max_sim) if max_sim > 0 else None,
+        metadata=logo_sim_result,
+        category="brand_logo_mismatch"
+    ))
+    evidence.append(create_evidence_item(
+        "A9", 4, "Favicon similarity match", fav_sim_result.get("status"),
+        severity="info", source="Favicon analyzer", evidence_type="inference",
+        metadata=fav_sim_result,
+        category="brand_logo_mismatch"
+    ))
+    evidence.append(create_evidence_item(
+        "A9", 5, "Brand color theme matching", color_result.get("status"),
+        severity="info", source="DOM CSS parser", evidence_type="deterministic",
+        metadata=color_result,
+        category="page_language_detected"
+    ))
+    evidence.append(create_evidence_item(
+        "A9", 6, "Trademark ownership references", trademark_result.get("status"),
+        severity="info", source="Brand reference catalog", evidence_type="deterministic",
+        metadata=trademark_result,
+        category="server_banner_detected"
+    ))
+    evidence.append(create_evidence_item(
+        "A9", 7, "Brand layout structure similarity", layout_result.get("status"),
+        severity="info", source="DOM layout analyzer", evidence_type="inference",
+        metadata=layout_result,
+        category="server_banner_detected"
+    ))
 
     data_payload = {
         "brand_name_matching": brand_names_result,

@@ -1,0 +1,100 @@
+{
+  "blocking_findings_count": 0,
+  "collected_at": "2026-09-16T13:07:39Z",
+  "gate_status": "READY_FOR_EXPERIMENT",
+  "is_ready": true,
+  "manifest": {
+    "diagnostics": {
+      "max_practical_ceiling": 2500,
+      "min_useful_dataset_size": 300,
+      "sources_harvested_count": 4,
+      "target_planning_capacity": 1250
+    },
+    "duplicate_counts": {
+      "exact_duplicates": 0
+    },
+    "end_timestamp_utc": "2026-09-16T13:07:39Z",
+    "ground_truth_summary": {
+      "BENIGN": 620,
+      "MALICIOUS": 260,
+      "UNASSIGNED_AT_COLLECTION": 340
+    },
+    "liveness_summary": {
+      "LIVE": 575,
+      "NOT_APPLICABLE": 120,
+      "NOT_LIVE": 525
+    },
+    "manifest_sha256": "f5c3b01e0599ab5b5ca6c7d1b2ff58b8e28b1acddcd1225ad40b3f1a192ded57",
+    "modality_counts": {
+      "DIRECT_URL": 1100,
+      "QR_IMAGE": 60,
+      "QR_PAYLOAD": 60
+    },
+    "raw_artifacts_sha256": "593840f6517f1e9e0e248b3e2f3356db6de3de3353bee4c6b3b5467762664df7",
+    "session_id": "FULL-BENCHMARK-COLLECTION-20260916130739",
+    "session_status": "COMPLETED",
+    "source_audits": {
+      "kaggle_qr_phishing": {
+        "candidates_accepted": 60,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 0,
+        "liveness_passed": 60,
+        "metadata": {},
+        "raw_candidates_observed": 60,
+        "source_name": "kaggle_qr_phishing",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "openphish_community": {
+        "candidates_accepted": 500,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 500,
+        "liveness_passed": 0,
+        "metadata": {},
+        "raw_candidates_observed": 500,
+        "source_name": "openphish_community",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "synthetic_qr_testbed": {
+        "candidates_accepted": 60,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 20,
+        "liveness_passed": 40,
+        "metadata": {},
+        "raw_candidates_observed": 60,
+        "source_name": "synthetic_qr_testbed",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "tranco_top_curated": {
+        "candidates_accepted": 600,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 25,
+        "liveness_passed": 575,
+        "metadata": {},
+        "raw_candidates_observed": 600,
+        "source_name": "tranco_top_curated",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      }
+    },
+    "start_timestamp_utc": "2026-09-16T13:07:39Z",
+    "stopping_reason": "SOURCES_EXHAUSTED",
+    "ti_exposure_summary": {
+      "direct": 185,
+      "none": 1035
+    },
+    "total_candidates_observed": 1220,
+    "total_candidates_rejected": 0,
+    "total_candidates_retained": 1220,
+    "total_eligible_unique_targets": 655
+  },
+  "session_id": "FULL-BENCHMARK-COLLECTION-20260916130739",
+  "total_records": 1220,
+  "warnings_count": 222
+}

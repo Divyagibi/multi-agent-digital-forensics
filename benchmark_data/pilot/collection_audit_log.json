@@ -1,0 +1,100 @@
+{
+  "blocking_findings_count": 0,
+  "collected_at": "2026-09-16T12:58:02Z",
+  "gate_status": "READY_FOR_EXPERIMENT",
+  "is_ready": true,
+  "manifest": {
+    "diagnostics": {
+      "max_practical_ceiling": 100,
+      "min_useful_dataset_size": 10,
+      "sources_harvested_count": 4,
+      "target_planning_capacity": 50
+    },
+    "duplicate_counts": {
+      "exact_duplicates": 0
+    },
+    "end_timestamp_utc": "2026-09-16T12:58:02Z",
+    "ground_truth_summary": {
+      "BENIGN": 18,
+      "MALICIOUS": 16,
+      "UNASSIGNED_AT_COLLECTION": 8
+    },
+    "liveness_summary": {
+      "LIVE": 16,
+      "NOT_APPLICABLE": 12,
+      "NOT_LIVE": 14
+    },
+    "manifest_sha256": "259ad002336d440ed771e2911e70f67f7f88adaf754cf3035e6d8044809937ee",
+    "modality_counts": {
+      "DIRECT_URL": 30,
+      "QR_IMAGE": 5,
+      "QR_PAYLOAD": 7
+    },
+    "raw_artifacts_sha256": "fcba4e5546bc80b76e50274a32ae9f19418fb41bb7e91d31f20aa9c9fd4af20f",
+    "session_id": "PILOT-COLLECTION-20260916125802",
+    "session_status": "COMPLETED",
+    "source_audits": {
+      "kaggle_qr_phishing": {
+        "candidates_accepted": 5,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 0,
+        "liveness_passed": 5,
+        "metadata": {},
+        "raw_candidates_observed": 5,
+        "source_name": "kaggle_qr_phishing",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "openphish_community": {
+        "candidates_accepted": 14,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 14,
+        "liveness_passed": 0,
+        "metadata": {},
+        "raw_candidates_observed": 14,
+        "source_name": "openphish_community",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "synthetic_qr_testbed": {
+        "candidates_accepted": 7,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 3,
+        "liveness_passed": 4,
+        "metadata": {},
+        "raw_candidates_observed": 7,
+        "source_name": "synthetic_qr_testbed",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      },
+      "tranco_top_curated": {
+        "candidates_accepted": 16,
+        "candidates_rejected": 0,
+        "errors": [],
+        "liveness_failed": 0,
+        "liveness_passed": 16,
+        "metadata": {},
+        "raw_candidates_observed": 16,
+        "source_name": "tranco_top_curated",
+        "source_role": "CANDIDATE_SOURCE",
+        "status": "SUCCESS"
+      }
+    },
+    "start_timestamp_utc": "2026-09-16T12:58:02Z",
+    "stopping_reason": "SOURCES_EXHAUSTED",
+    "ti_exposure_summary": {
+      "direct": 12,
+      "none": 30
+    },
+    "total_candidates_observed": 42,
+    "total_candidates_rejected": 0,
+    "total_candidates_retained": 42,
+    "total_eligible_unique_targets": 23
+  },
+  "session_id": "PILOT-COLLECTION-20260916125802",
+  "total_records": 42,
+  "warnings_count": 1
+}

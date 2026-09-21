@@ -22,3 +22,7 @@ venv.bak/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Scratch & temporary validation scripts
+scratch/
+

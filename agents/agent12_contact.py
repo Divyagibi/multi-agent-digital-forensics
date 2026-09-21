@@ -8,6 +8,7 @@ Strictly passive forensic evidence collection.
 DO NOT calculate Trust/Risk score, phishing probability, or final verdict.
 """
 
+import ipaddress
 import datetime
 import json
 import os
@@ -49,6 +50,52 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    if url.startswith("data:image/"):
+        return True
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 FREE_EMAIL_DOMAINS: Set[str] = {
     "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com",
@@ -101,8 +148,12 @@ def _extract_registered_domain(url: str) -> str:
 
 
 def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[str], Optional[str], Optional[BeautifulSoup], List[str]]:
-    """Fetch HTML page safely with strict size and timeout limits."""
+    """Fetch HTML page safely with strict size, SSRF and timeout limits."""
     errors = []
+    if not _is_safe_url(url):
+        errors.append("Blocked potentially unsafe/private URL (SSRF protection)")
+        return None, url, None, errors
+
     try:
         resp = session.get(
             url,
@@ -133,6 +184,10 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
         return None, url, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirected to potentially unsafe/private URL (SSRF protection)")
+        return None, final_url, None, errors
+
     try:
         content_chunks = []
         downloaded = 0
@@ -326,11 +381,14 @@ def _extract_and_validate_emails(
                     "location": "Page body / Footer",
                 }
 
+    KNOWN_TELEMETRY_DOMAINS = {"sentry.io", "ingest.sentry.io", "bugsnag.com", "datadoghq.com", "rollbar.com", "raygun.io", "loggly.com"}
+
     for email_key, data in list(found_emails.items())[:10]:
         email_str = data["email"]
         email_domain = email_str.split("@")[-1].lower() if "@" in email_str else ""
         is_free = email_domain in FREE_EMAIL_DOMAINS
-        domain_mismatch = bool(site_domain and email_domain and site_domain not in email_domain and email_domain not in site_domain)
+        is_telemetry = any(td in email_domain for td in KNOWN_TELEMETRY_DOMAINS)
+        domain_mismatch = bool(site_domain and email_domain and not is_telemetry and site_domain not in email_domain and email_domain not in site_domain)
 
         # RFC format check
         valid_format = bool(re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email_str))
@@ -338,9 +396,10 @@ def _extract_and_validate_emails(
         email_entry = {
             "email": email_str,
             "source": data["source"],
-            "type": "free_webmail" if is_free else "business",
+            "type": "telemetry_dsn" if is_telemetry else ("free_webmail" if is_free else "business"),
             "domain_mismatch": domain_mismatch,
             "is_free_provider": is_free,
+            "is_telemetry": is_telemetry,
         }
         emails_list.append(email_entry)
 
@@ -881,109 +940,145 @@ def analyze_contact(url: str) -> Dict[str, Any]:
     structured_evidence = []
 
     # E12-01: Business Identity
+    has_biz_name = bool(business_identity.get("name"))
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=1,
         finding="Declared business, company, or organizational entity identification",
-        value=business_identity.get("name"),
+        value=business_identity.get("name") if has_biz_name else "No declared entity name",
         severity="info",
         source="DOM / JSON-LD Schema",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata=business_identity
+        metadata=business_identity,
+        category="business_identity_declared" if has_biz_name else "no_business_identity_disclosed"
     ))
 
     # E12-02: Email Addresses
     has_free_email = any(e.get("is_free_provider") for e in emails_list)
-    has_mismatch_email = any(e.get("domain_mismatch") for e in emails_list)
+    has_mismatch_email = any(e.get("domain_mismatch") and not e.get("is_free_provider") for e in emails_list)
+    if has_mismatch_email:
+        email_cat = "brand_domain_mismatch"
+        email_sev = "medium"
+        email_strength = 0.6
+        email_finding = "Contact email domain mismatch with target apex domain"
+    elif has_free_email:
+        email_cat = "free_webmail_contact"
+        email_sev = "info"
+        email_strength = 0.1
+        email_finding = "Contact email hosted on free/public webmail provider"
+    elif len(emails_list) > 0:
+        email_cat = "contact_email_aligned"
+        email_sev = "info"
+        email_strength = 0.1
+        email_finding = "Contact email domain aligned with target apex domain"
+    else:
+        email_cat = "no_contact_disclosed"
+        email_sev = "info"
+        email_strength = 0.05
+        email_finding = "No contact email addresses disclosed"
+
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=2,
-        finding="Contact email addresses and domain alignment analysis",
-        value=[e.get("email") for e in emails_list],
-        severity="medium" if (has_free_email or has_mismatch_email) else "info",
+        finding=email_finding,
+        value=[e.get("email") for e in emails_list] if emails_list else "No email address found",
+        severity=email_sev,
         source="HTML Mailto / Regex",
         evidence_type="deterministic",
-        evidence_strength=0.6 if (has_free_email or has_mismatch_email) else 0.1,
-        metadata={"emails": emails_list, "validation": email_val_list}
+        evidence_strength=email_strength,
+        metadata={"emails": emails_list, "validation": email_val_list},
+        category=email_cat
     ))
 
     # E12-03: Phone Numbers
+    has_phones = len(phones_list) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=3,
         finding="Telephone contact channels and international number normalization",
-        value=[p.get("number") for p in phones_list],
+        value=[p.get("number") for p in phones_list] if has_phones else "No phone numbers found",
         severity="info",
         source="HTML Tel / Phonenumbers Parser",
         evidence_type="deterministic",
-        evidence_strength=0.1,
-        metadata={"phones": phones_list, "validation": phone_val_list}
+        evidence_strength=0.1 if has_phones else 0.05,
+        metadata={"phones": phones_list, "validation": phone_val_list},
+        category="phone_verified" if has_phones else "no_contact_disclosed"
     ))
 
     # E12-04: Physical Address
+    has_addresses = len(addresses_list) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=4,
         finding="Physical corporate address extraction and location consistency",
-        value=[a.get("address") for a in addresses_list],
+        value=[a.get("address") for a in addresses_list] if has_addresses else "No physical address found",
         severity="info",
         source="Postal Address DOM Parser",
         evidence_type="deterministic",
-        evidence_strength=0.1,
-        metadata={"addresses": addresses_list, "consistency": addr_consistency}
+        evidence_strength=0.1 if has_addresses else 0.05,
+        metadata={"addresses": addresses_list, "consistency": addr_consistency},
+        category="physical_address_verified" if has_addresses else "no_contact_disclosed"
     ))
 
     # E12-05: Google Maps
+    has_maps = bool(maps_data.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=5,
         finding="Embedded map and geographic business reference verification",
-        value=maps_data.get("detected", False),
+        value=has_maps,
         severity="info",
         source="Iframe / Map Anchor Analysis",
         evidence_type="deterministic",
-        evidence_strength=0.1,
-        metadata=maps_data
+        evidence_strength=0.1 if has_maps else 0.05,
+        metadata=maps_data,
+        category="physical_address_verified" if has_maps else "no_contact_disclosed"
     ))
 
     # E12-06: Social Media Channels
+    has_socials = len(social_list) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=6,
         finding="Official organizational social media channels and handle consistency",
-        value=[s.get("platform") for s in social_list],
+        value=[s.get("platform") for s in social_list] if has_socials else "No social media links found",
         severity="info",
         source="Social Profile Link Analysis",
-        evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata={"social_profiles": social_list, "consistency": social_consistency}
+        evidence_type="deterministic",
+        evidence_strength=0.1 if has_socials else 0.05,
+        metadata={"social_profiles": social_list, "consistency": social_consistency},
+        category="social_presence_verified" if has_socials else "no_contact_disclosed"
     ))
 
     # E12-07: Business Registration (CIN/CRN)
+    has_comp_reg = bool(company_reg.get("found"))
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=7,
         finding="Corporate registration identifiers (CIN / CRN / Company Number)",
-        value=company_reg.get("number") if company_reg.get("found") else None,
+        value=company_reg.get("number") if has_comp_reg else "No corporate registration number found",
         severity="info",
         source="Corporate Registry Disclosures",
-        evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata={"business_reg": business_reg, "company_reg": company_reg}
+        evidence_type="deterministic",
+        evidence_strength=0.1 if has_comp_reg else 0.05,
+        metadata={"business_reg": business_reg, "company_reg": company_reg},
+        category="company_registration_verified" if has_comp_reg else "no_contact_disclosed"
     ))
 
     # E12-08: Tax Registration (GSTIN/VAT)
+    has_taxes = len(tax_list) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A12",
         index=8,
         finding="Fiscal and tax registration numbers (GSTIN / VAT)",
-        value=[t.get("number") for t in tax_list],
+        value=[t.get("number") for t in tax_list] if has_taxes else "No tax identifiers found",
         severity="info",
         source="Fiscal Authority Disclosure",
-        evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata={"taxes": tax_list}
+        evidence_type="deterministic",
+        evidence_strength=0.1 if has_taxes else 0.05,
+        metadata={"taxes": tax_list},
+        category="gst_vat_verified" if has_taxes else "no_contact_disclosed"
     ))
 
     # E12-09: Cross-Check Consistency
@@ -993,11 +1088,12 @@ def analyze_contact(url: str) -> Dict[str, Any]:
         index=9,
         finding="Multi-source cross-channel business identity consistency and conflict analysis",
         value=identity_consistency.get("status", "unknown"),
-        severity="high" if is_inconsistent else "info",
+        severity="medium" if is_inconsistent else "info",
         source="Cross-Channel Corroboration Engine",
         evidence_type="inference",
-        evidence_strength=0.8 if is_inconsistent else 0.1,
-        metadata=identity_consistency
+        evidence_strength=0.75 if is_inconsistent else 0.1,
+        metadata=identity_consistency,
+        category="brand_domain_mismatch" if is_inconsistent else "identity_cross_check_aligned"
     ))
 
     print("[Agent 12] Contact verification completed.")

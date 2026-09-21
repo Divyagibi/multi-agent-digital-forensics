@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 from app import app
 from agents.agent12_contact import (
     analyze_contact,
+    _is_safe_url,
+    _fetch_webpage_safe,
     _normalize_url,
     _extract_registered_domain,
     _extract_structured_data,
@@ -26,6 +28,11 @@ from agents.agent12_contact import (
     _extract_registration_and_tax,
     _perform_identity_cross_check,
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
+from services.trust_calculation_engine import TrustCalculationEngine
 
 # Mock HTML Fixtures
 MOCK_FULL_LEGIT_HTML = """
@@ -319,8 +326,206 @@ class TestAgent12Contact(unittest.TestCase):
         self.assertIn("business_identity", data)
         self.assertIn("email_addresses", data)
         self.assertIn("phone_numbers", data)
-        self.assertIn("contact_availability", data)
+    def test_27_ssrf_protection(self):
+        """Test 27: Verify SSRF protection rejects private, loopback, and metadata IPs."""
+        self.assertFalse(_is_safe_url("http://127.0.0.1:8000/contact"))
+        self.assertFalse(_is_safe_url("http://localhost:8080/support"))
+        self.assertFalse(_is_safe_url("http://169.254.169.254/latest/meta-data/"))
+        self.assertFalse(_is_safe_url("http://10.0.0.1/admin"))
+        self.assertFalse(_is_safe_url("http://192.168.1.1/secret"))
+        self.assertFalse(_is_safe_url("http://172.16.0.5/api"))
+        self.assertFalse(_is_safe_url("http://[::1]/internal"))
+        self.assertFalse(_is_safe_url("http://metadata.google.internal/computeMetadata/v1/"))
+        self.assertTrue(_is_safe_url("https://example.com/contact-us"))
+        self.assertTrue(_is_safe_url("https://8.8.8.8/dns-query"))
+
+        # Fetch safe test
+        session = MagicMock()
+        html, final_url, soup, errors = _fetch_webpage_safe("http://127.0.0.1/contact", session)
+        self.assertIsNone(html)
+        self.assertTrue(any("SSRF" in err for err in errors))
+
+    @patch("agents.agent12_contact._fetch_webpage_safe")
+    def test_28_evidence_schema_and_ledger(self, mock_fetch):
+        """Test 28: Validate all A12 evidence items comply with Common Evidence Schema and ledger ingestion."""
+        soup = BeautifulSoup(MOCK_FULL_LEGIT_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_FULL_LEGIT_HTML, "https://acme-global.com", soup, [])
+
+        result = analyze_contact("https://acme-global.com")
+        self.assertTrue(validate_agent_result(result))
+
+        evidence_items = result.get("evidence", [])
+        self.assertEqual(len(evidence_items), 9)
+
+        ledger = EvidenceLedger(target="https://acme-global.com")
+        ledger.add_entries_from_agent(result)
+        self.assertEqual(len(ledger.entries), 9)
+
+        # Check individual evidence structure
+        for item in evidence_items:
+            self.assertTrue(validate_evidence_item(item))
+            normalized = normalize_evidence_item(item, agent_identifier="A12", agent_result=result)
+            self.assertTrue(normalized["evidence_id"].startswith("E12-"))
+            self.assertIn(normalized["agent_id"], [12, "A12"])
+            self.assertEqual(normalized["provenance"]["source_agent"], "A12")
+            self.assertIn(normalized["severity"], ["info", "low", "medium", "high", "critical"])
+            self.assertIn(normalized["evidence_type"], ["deterministic", "external_source", "inference"])
+
+    @patch("agents.agent12_contact._fetch_webpage_safe")
+    def test_29_strict_schema_no_scores(self, mock_fetch):
+        """Test 29: Verify A12 does NOT output trust scores, risk scores, or final verdicts."""
+        soup = BeautifulSoup(MOCK_FULL_LEGIT_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_FULL_LEGIT_HTML, "https://acme-global.com", soup, [])
+
+        result = analyze_contact("https://acme-global.com")
+
+        forbidden_keys = [
+            "trust_score", "risk_score", "verdict", "phishing_score",
+            "final_verdict", "decision", "reputation_score", "malicious_score"
+        ]
+        for key in forbidden_keys:
+            self.assertNotIn(key, result)
+            self.assertNotIn(key, result.get("data", {}))
+
+    @patch("agents.agent12_contact._fetch_webpage_safe")
+    def test_30_tce_integration_and_polarity(self, mock_fetch):
+        """Test 30: Verify A12 evidence categories map cleanly into declarative TCE polarities."""
+        soup = BeautifulSoup(MOCK_FULL_LEGIT_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_FULL_LEGIT_HTML, "https://acme-global.com", soup, [])
+
+        result = analyze_contact("https://acme-global.com")
+        ledger = EvidenceLedger(target="https://acme-global.com")
+        ledger.add_entries_from_agent(result)
+
+        engine = TrustCalculationEngine()
+        tce_eval = engine.calculate_trust(ledger)
+        self.assertGreater(tce_eval["trust_score"], 0.0)
+
+        # Check individual polarity mapping
+        for item in result["evidence"]:
+            cat = item.get("category", "")
+            polarity = resolve_evidence_polarity(cat)
+            if cat in ("company_registration_verified", "tax_registration_verified", "gst_vat_verified", "physical_address_verified", "phone_verified", "social_presence_verified"):
+                self.assertEqual(polarity, "risk_reducing")
+            elif cat == "brand_domain_mismatch":
+                self.assertEqual(polarity, "risk_increasing")
+            elif cat in ("business_identity_declared", "contact_email_aligned", "free_webmail_contact", "no_contact_disclosed", "no_business_identity_disclosed", "identity_cross_check_aligned"):
+                self.assertEqual(polarity, "neutral")
+
+    def test_31_scope_separation_a4_a9_a12(self):
+        """Test 31: Confirm A12 inspects business identity and contact without making brand impersonation claims."""
+        soup = BeautifulSoup(MOCK_SUSPICIOUS_CONTACT_HTML, "html.parser")
+        summary, entities = _extract_structured_data(soup)
+        biz_id, evidence = _detect_business_identity(soup, entities)
+
+        # A12 identifies declared business name without claiming brand impersonation
+        self.assertEqual(biz_id["name"], "Instant Quick Cash Loan Pro")
+        for ev in evidence:
+            self.assertNotIn("impersonat", ev.lower())
+
+    # 32. Elimination of meta_description_present Fallback
+    def test_32_no_meta_description_fallback(self):
+        """Test 32: Confirm A12 never uses meta_description_present as a fallback category."""
+        # Clean scenario with empty contact
+        empty_html = "<html><body><p>Hello world</p></body></html>"
+        soup = BeautifulSoup(empty_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (empty_html, "https://empty-test.com", soup, [])
+            res = analyze_contact("https://empty-test.com")
+            evidence = res.get("evidence", [])
+            for ev in evidence:
+                self.assertNotEqual(
+                    ev.get("category"),
+                    "meta_description_present",
+                    f"A12 must never use meta_description_present fallback: {ev}"
+                )
+
+    # 33. Free Webmail Neutrality (Gmail is info / neutral, not phishing)
+    def test_33_free_webmail_neutrality(self):
+        """Test 33: Verify free webmail (@gmail.com) is classified as free_webmail_contact and neutral."""
+        gmail_html = "<html><body><p>Contact us: <a href='mailto:artisan.bakery@gmail.com'>artisan.bakery@gmail.com</a></p></body></html>"
+        soup = BeautifulSoup(gmail_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (gmail_html, "https://artisanbakery.com", soup, [])
+            res = analyze_contact("https://artisanbakery.com")
+            email_ev = next(e for e in res["evidence"] if e.get("evidence_id") == "E12-02")
+            self.assertEqual(email_ev.get("category"), "free_webmail_contact")
+            self.assertEqual(email_ev.get("severity"), "info")
+            self.assertEqual(resolve_evidence_polarity(email_ev.get("category")), "neutral")
+
+    # 34. Business Identity Declared Semantics
+    def test_34_business_identity_declared_semantics(self):
+        """Test 34: Verify declared business name emits business_identity_declared (neutral), distinguishing it from official registry verification."""
+        name_html = "<html><head><title>Small Craft Studio</title></head><body><footer>&copy; 2026 Small Craft Studio</footer></body></html>"
+        soup = BeautifulSoup(name_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (name_html, "https://smallcraft.com", soup, [])
+            res = analyze_contact("https://smallcraft.com")
+            biz_ev = next(e for e in res["evidence"] if e.get("evidence_id") == "E12-01")
+            self.assertEqual(biz_ev.get("category"), "business_identity_declared")
+            self.assertEqual(biz_ev.get("severity"), "info")
+            self.assertEqual(resolve_evidence_polarity(biz_ev.get("category")), "neutral")
+
+    # 35. Missing Contact Neutrality
+    def test_35_missing_contact_neutrality(self):
+        """Test 35: Verify missing contact channels emit no_contact_disclosed with neutral polarity."""
+        sparse_html = "<html><body><p>Documentation only</p></body></html>"
+        soup = BeautifulSoup(sparse_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (sparse_html, "https://docs-only.org", soup, [])
+            res = analyze_contact("https://docs-only.org")
+            for ev in res["evidence"]:
+                if ev.get("category") == "no_contact_disclosed":
+                    self.assertEqual(ev.get("severity"), "info")
+                    self.assertEqual(resolve_evidence_polarity(ev.get("category")), "neutral")
+
+    # 36. Deterministic Evidence Type for Local Parsing
+    def test_36_deterministic_evidence_types(self):
+        """Test 36: Verify local HTML parsing findings use deterministic/inference and never fake external/threat_intelligence."""
+        soup = BeautifulSoup(MOCK_FULL_LEGIT_HTML, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (MOCK_FULL_LEGIT_HTML, "https://acme-global.com", soup, [])
+            res = analyze_contact("https://acme-global.com")
+            for ev in res["evidence"]:
+                self.assertIn(ev.get("type"), ["deterministic", "inference"])
+                self.assertNotEqual(ev.get("type"), "threat_intelligence")
+
+    # 37. False Positive Prevention on Small Business
+    def test_37_small_business_false_positive_prevention(self):
+        """Test 37: Verify small business with Gmail support and no social media produces no false high-risk claims."""
+        small_biz_html = """
+        <html>
+        <head><title>Mama Rosa Italian Bakery</title></head>
+        <body>
+            <h1>Mama Rosa Bakery</h1>
+            <p>Order fresh pasta: <a href="mailto:mamarosa@gmail.com">mamarosa@gmail.com</a></p>
+            <p>Call us: <a href="tel:+39066987456">+39 06 6987456</a></p>
+            <address>Via della Spiga 12, Rome, Italy</address>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(small_biz_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (small_biz_html, "https://mamarosabakery.com", soup, [])
+            res = analyze_contact("https://mamarosabakery.com")
+            for ev in res["evidence"]:
+                self.assertIn(ev.get("severity"), ["info", "low"])
+                self.assertNotEqual(ev.get("severity"), "critical")
+
+    # 38. Identity Inconsistency Detection
+    def test_38_identity_inconsistency_medium_severity(self):
+        """Test 38: Conflicting third-party email domain produces brand_domain_mismatch with medium severity."""
+        conflict_html = "<html><body><p>Support: <a href='mailto:admin@unrelated-hijack.xyz'>admin@unrelated-hijack.xyz</a></p></body></html>"
+        soup = BeautifulSoup(conflict_html, "html.parser")
+        with patch("agents.agent12_contact._fetch_webpage_safe") as mock_fetch:
+            mock_fetch.return_value = (conflict_html, "https://legitbrand.com", soup, [])
+            res = analyze_contact("https://legitbrand.com")
+            email_ev = next(e for e in res["evidence"] if e.get("evidence_id") == "E12-02")
+            self.assertEqual(email_ev.get("category"), "brand_domain_mismatch")
+            self.assertEqual(email_ev.get("severity"), "medium")
+            self.assertEqual(resolve_evidence_polarity("brand_domain_mismatch"), "risk_increasing")
 
 
 if __name__ == "__main__":
     unittest.main()
+

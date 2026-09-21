@@ -703,7 +703,7 @@ def analyze_url(url: str) -> dict:
 
     # Step 12: Compile structured evidence items
     evidence = []
-    tot_len = data["url_length"].get("total_length", 0)
+    tot_len = data["url_length"].get("value", data.get("length_analysis", {}).get("total_length", len(raw_url)))
     evidence.append(create_evidence_item("A5", 1, "URL character length", tot_len, severity="low" if tot_len > 100 else "info", source="URL structure", evidence_type="deterministic", metadata=data["url_length"]))
     evidence.append(create_evidence_item("A5", 2, "IP address used as hostname", data["ip_instead_of_domain"].get("detected", False), severity="medium" if data["ip_instead_of_domain"].get("detected") else "info", source="URL structure", evidence_type="deterministic", metadata=data["ip_instead_of_domain"]))
     evidence.append(create_evidence_item("A5", 3, "Suspicious characters in URL", data["suspicious_characters"].get("detected", False), severity="low" if data["suspicious_characters"].get("detected") else "info", source="URL structure", evidence_type="deterministic", metadata=data["suspicious_characters"]))

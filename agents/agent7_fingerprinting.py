@@ -133,9 +133,16 @@ def normalize_url(raw_url: str) -> dict:
     domain = hostname
     if _TLDEXTRACT_AVAILABLE and hostname:
         ext = tldextract.extract(normalized)
-        reg_dom = getattr(ext, 'top_domain_under_public_suffix', None) or getattr(ext, 'registered_domain', '')
-        if reg_dom:
-            domain = reg_dom.lower()
+        if hasattr(ext, "top_domain_under_public_suffix"):
+            reg_dom = ext.top_domain_under_public_suffix
+            if reg_dom:
+                domain = reg_dom.lower()
+        else:
+            try:
+                if ext.domain and ext.suffix:
+                    domain = f"{ext.domain}.{ext.suffix}".lower()
+            except Exception:
+                pass
     elif hostname:
         parts = hostname.split(".")
         if len(parts) >= 2:
@@ -1096,15 +1103,31 @@ def analyze_fingerprint(raw_url: str) -> dict:
 
     # Step 10: Compile structured evidence items
     evidence = []
-    evidence.append(create_evidence_item("A7", 1, "Web server signature", web_server_info.get("name") if web_server_info.get("status") == "detected" else None, severity="info", source="HTTP headers", evidence_type="deterministic", metadata=web_server_info))
-    evidence.append(create_evidence_item("A7", 2, "Content management system", cms_info.get("name") if cms_info.get("status") == "detected" else None, severity="info", source="Website HTML / Headers", evidence_type="deterministic", metadata=cms_info))
-    evidence.append(create_evidence_item("A7", 3, "Web frameworks detected", [f.get("name") for f in frameworks_info] if frameworks_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"frameworks": frameworks_info}))
-    evidence.append(create_evidence_item("A7", 4, "JavaScript libraries detected", [j.get("name") for j in js_libraries_info] if js_libraries_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"libraries": js_libraries_info}))
-    evidence.append(create_evidence_item("A7", 5, "Analytics services detected", [a.get("name") for a in analytics_info] if analytics_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"analytics": analytics_info}))
-    evidence.append(create_evidence_item("A7", 6, "Third-party services integrated", [t.get("name") for t in third_party_info] if third_party_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"services": third_party_info}))
-    evidence.append(create_evidence_item("A7", 7, "Tracking and marketing pixels", [s.get("name") for s in tracking_scripts_info] if tracking_scripts_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"tracking_scripts": tracking_scripts_info}))
-    evidence.append(create_evidence_item("A7", 8, "Exposed admin panel paths", [p.get("path") for p in admin_panels_info] if admin_panels_info else [], severity="medium" if admin_panels_info else "info", source="HTTP probe", evidence_type="deterministic", metadata={"admin_panels": admin_panels_info}))
-    evidence.append(create_evidence_item("A7", 9, "Open directory listing paths", [d.get("path") for d in open_directories_info] if open_directories_info else [], severity="medium" if open_directories_info else "info", source="HTTP probe", evidence_type="deterministic", metadata={"open_directories": open_directories_info}))
+    evidence.append(create_evidence_item("A7", 1, "Web server signature", web_server_info.get("name") if web_server_info.get("status") == "detected" else None, severity="info", source="HTTP headers", evidence_type="deterministic", metadata=web_server_info, category="server_banner_detected"))
+    evidence.append(create_evidence_item("A7", 2, "Content management system", cms_info.get("name") if cms_info.get("status") == "detected" else None, severity="info", source="Website HTML / Headers", evidence_type="deterministic", metadata=cms_info, category="framework_detected"))
+    evidence.append(create_evidence_item("A7", 3, "Web frameworks detected", [f.get("name") for f in frameworks_info] if frameworks_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"frameworks": frameworks_info}, category="framework_detected"))
+    evidence.append(create_evidence_item("A7", 4, "JavaScript libraries detected", [j.get("name") for j in js_libraries_info] if js_libraries_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"libraries": js_libraries_info}, category="framework_detected"))
+    evidence.append(create_evidence_item("A7", 5, "Analytics services detected", [a.get("name") for a in analytics_info] if analytics_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"analytics": analytics_info}, category="analytics_tracker_detected"))
+    evidence.append(create_evidence_item("A7", 6, "Third-party services integrated", [t.get("name") for t in third_party_info] if third_party_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"services": third_party_info}, category="analytics_tracker_detected"))
+    evidence.append(create_evidence_item("A7", 7, "Tracking and marketing pixels", [s.get("name") for s in tracking_scripts_info] if tracking_scripts_info else [], severity="info", source="Website HTML", evidence_type="deterministic", metadata={"tracking_scripts": tracking_scripts_info}, category="analytics_tracker_detected"))
+    
+    detected_admin_panels = [p.get("path") for p in admin_panels_info if p.get("detected") is True] if isinstance(admin_panels_info, list) else []
+    # Standard login pages and authentication endpoints requiring login are normal web interfaces (neutral info)
+    if len(detected_admin_panels) > 0:
+        admin_sev = "info"
+        admin_cat = "server_banner_detected"
+        admin_finding = "Public login and user authentication interface identified"
+    else:
+        admin_sev = "info"
+        admin_cat = "server_banner_detected"
+        admin_finding = "No exposed administrative panel paths found"
+
+    evidence.append(create_evidence_item("A7", 8, admin_finding, detected_admin_panels, severity=admin_sev, source="HTTP probe", evidence_type="deterministic", metadata={"admin_panels": admin_panels_info, "detected_paths": detected_admin_panels}, category=admin_cat))
+    
+    detected_open_dirs = [d.get("path") for d in open_directories_info if d.get("directory_listing") is True] if isinstance(open_directories_info, list) else []
+    open_dir_sev = "medium" if len(detected_open_dirs) > 0 else "info"
+    open_dir_finding = "Open directory listing paths detected" if len(detected_open_dirs) > 0 else "No open directory listings found"
+    evidence.append(create_evidence_item("A7", 9, open_dir_finding, detected_open_dirs, severity=open_dir_sev, source="HTTP probe", evidence_type="deterministic", metadata={"open_directories": open_directories_info, "detected_paths": detected_open_dirs}, category="open_directory_listing" if open_dir_sev == "medium" else "server_banner_detected"))
 
     data_payload = {
         "web_server": web_server_info,

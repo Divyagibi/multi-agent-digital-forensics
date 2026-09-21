@@ -30,7 +30,7 @@ let currentSelectedAgent = 1;
 let currentAnalysisSource = "Direct URL";
 let currentDecodedTarget = null;
 let currentQrFile = null;
-let currentTargetUrl = "https://example.com";
+let currentTargetUrl = "";
 let currentPipelineSession = null;
 let currentReportPayload = null;
 
@@ -418,6 +418,41 @@ function updateAgentStatus(agentId, statusClass, statusText) {
 }
 
 /**
+ * Validate URL structure for manual target input.
+ */
+function isValidUrlInput(input) {
+    if (!input || typeof input !== "string") return false;
+    const str = input.trim();
+    if (!str) return false;
+
+    try {
+        let urlToTest = str;
+        if (!/^https?:\/\//i.test(urlToTest)) {
+            urlToTest = "http://" + urlToTest;
+        }
+        const parsed = new URL(urlToTest);
+        if (!parsed.hostname) return false;
+
+        const host = parsed.hostname;
+        const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+        const hasDot = host.includes(".");
+        const isLocal = host === "localhost";
+
+        if (!isIp && !isLocal && (!hasDot || host.startsWith(".") || host.endsWith("."))) {
+            return false;
+        }
+
+        if (/[^a-zA-Z0-9.\-:]/.test(host)) {
+            return false;
+        }
+
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
  * Start the forensic analysis across all 18 independent agents for manual URL.
  */
 async function startAnalysis() {
@@ -429,9 +464,22 @@ async function startAnalysis() {
         return;
     }
 
+    if (!isValidUrlInput(targetUrl)) {
+        alert("Invalid URL format. Please enter a valid URL (e.g., https://example.com).");
+        return;
+    }
+
     currentAnalysisSource = "Direct URL";
     currentDecodedTarget = targetUrl;
     currentTargetUrl = targetUrl;
+    currentPipelineSession = null;
+    currentReportPayload = null;
+
+    // Reset previous agent results
+    for (const key in agentResults) {
+        delete agentResults[key];
+    }
+
     const banner = document.getElementById("decodedTargetBanner");
     if (banner) banner.style.display = "none";
 
@@ -442,8 +490,13 @@ async function startAnalysis() {
     if (systemStatus) systemStatus.innerText = "Collecting forensic evidence across all 18 agents...";
 
     // Reset Trust score display strictly to non-calculated state
-    document.getElementById("trustScore").innerText = "--";
-    document.getElementById("trustStatus").innerText = "Evidence Collection Phase";
+    const trustScoreEl = document.getElementById("trustScore");
+    const trustStatusEl = document.getElementById("trustStatus");
+    if (trustScoreEl) trustScoreEl.innerText = "--";
+    if (trustStatusEl) {
+        trustStatusEl.innerText = "Evidence Collection Phase";
+        trustStatusEl.style.color = "";
+    }
 
     await executePipelineOnTarget(targetUrl, 1, 18);
 }
@@ -500,9 +553,62 @@ async function executePipelineOnTarget(targetUrl, startAgent = 1, endAgent = 18)
         }
     }
 
-    if (analyzeBtn) analyzeBtn.disabled = false;
     const systemStatus = document.getElementById("systemStatus");
-    if (systemStatus) systemStatus.innerText = "Evidence collection complete across all 18 agents. Click any card to inspect findings or view Final Report.";
+    if (systemStatus) systemStatus.innerText = "Finalizing investigation session and computing Trust Calculation Engine (TCE) scores...";
+
+    // Finalize session into authoritative ledger, TCE, AERE & Confidence
+    try {
+        const finalizeResp = await fetch("/api/pipeline/finalize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                url: targetUrl,
+                input_type: currentAnalysisSource && currentAnalysisSource.startsWith("QR") ? "qr" : "url",
+                original_input: currentAnalysisSource === "QR Code" ? (currentDecodedTarget || targetUrl) : targetUrl,
+                agents: agentResults
+            })
+        });
+
+        if (finalizeResp.ok) {
+            const session = await finalizeResp.json();
+            currentPipelineSession = session;
+
+            // Immediately update Dashboard Trust Score, Risk Score, and Verdict
+            const trustScoreEl = document.getElementById("trustScore");
+            const trustStatusEl = document.getElementById("trustStatus");
+            if (trustScoreEl && session.trust_score !== null && session.trust_score !== undefined) {
+                trustScoreEl.innerText = Number(session.trust_score).toFixed(1);
+            }
+            if (trustStatusEl && session.verdict) {
+                const verdictDisplay = String(session.verdict).replace(/_/g, " ").toUpperCase();
+                const riskVal = session.risk_score !== null && session.risk_score !== undefined ? Number(session.risk_score).toFixed(1) : "--";
+                trustStatusEl.innerText = `Verdict: ${verdictDisplay} (Risk: ${riskVal})`;
+                if (session.verdict === "legitimate" || session.verdict === "trusted" || session.verdict === "benign") {
+                    trustStatusEl.style.color = "var(--accent-emerald)";
+                } else if (session.verdict === "malicious" || session.verdict === "scam" || session.verdict === "phishing") {
+                    trustStatusEl.style.color = "var(--accent-rose)";
+                } else {
+                    trustStatusEl.style.color = "var(--accent-amber)";
+                }
+            }
+
+            if (systemStatus) {
+                systemStatus.innerText = `Investigation finalized (Verdict: ${session.verdict || "Completed"}). Click 'View Final Investigator Report' to inspect full dossier.`;
+            }
+        } else {
+            console.error("Pipeline finalization failed:", await finalizeResp.text());
+            if (systemStatus) {
+                systemStatus.innerText = "Evidence collection complete across 18 agents.";
+            }
+        }
+    } catch (finErr) {
+        console.error("Error finalizing investigation session:", finErr);
+        if (systemStatus) {
+            systemStatus.innerText = "Evidence collection complete across 18 agents.";
+        }
+    }
+
+    if (analyzeBtn) analyzeBtn.disabled = false;
 
     // Reveal Final Investigator Report CTA button
     const reportCta = document.getElementById("reportCtaContainer");
@@ -578,12 +684,6 @@ function renderErrorBlock(errors) {
         </div>
     `;
 }
-
-function escapeHtml(str) {
-    if (!str) return "";
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 /* AGENT 1: DOMAIN IDENTITY */
 function renderAgent1Evidence(result, container) {
     const d = result.data || {};
@@ -4767,6 +4867,27 @@ async function fetchAndRenderReport() {
     const target = currentDecodedTarget || currentTargetUrl || (document.getElementById("urlInput") ? document.getElementById("urlInput").value.trim() : "https://example.com");
 
     try {
+        // Defensive safeguard: finalize from existing agentResults if session was not saved
+        if (!currentPipelineSession && Object.keys(agentResults).length > 0) {
+            try {
+                const finalizeResp = await fetch("/api/pipeline/finalize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        url: target,
+                        input_type: currentAnalysisSource && currentAnalysisSource.startsWith("QR") ? "qr" : "url",
+                        original_input: currentAnalysisSource === "QR Code" ? (currentDecodedTarget || target) : target,
+                        agents: agentResults
+                    })
+                });
+                if (finalizeResp.ok) {
+                    currentPipelineSession = await finalizeResp.json();
+                }
+            } catch (finErr) {
+                console.warn("Pre-report finalization attempt failed:", finErr);
+            }
+        }
+
         const response = await fetch("/api/report", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

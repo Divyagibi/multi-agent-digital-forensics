@@ -275,9 +275,12 @@ def build_agent_result(
     }
 
     # If caller provided extra agent-specific root attributes (like input, virustotal, etc.)
+    # Strictly preserve canonical structured evidence
     if extra_fields and isinstance(extra_fields, dict):
+        reserved_keys = {"evidence"}
         for k, v in extra_fields.items():
-            result[k] = v
+            if k not in reserved_keys:
+                result[k] = v
 
     return result
 

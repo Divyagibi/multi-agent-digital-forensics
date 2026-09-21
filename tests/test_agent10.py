@@ -11,6 +11,8 @@ from agents.agent10_visual import (
     analyze_visual,
     _normalize_url,
     _extract_registered_domain,
+    _is_safe_url,
+    _fetch_webpage_safe,
     _capture_screenshot,
     _extract_ocr_text,
     _detect_trust_badges,
@@ -302,6 +304,144 @@ class TestAgent10Visual(unittest.TestCase):
         soup = BeautifulSoup(MOCK_CLEAN_HTML, "html.parser")
         patterns, evidence = _detect_suspicious_patterns(soup, MOCK_CLEAN_HTML, "")
         self.assertEqual(len(patterns), 0)
+
+    def test_21_ssrf_protection(self):
+        """Test 21: Verify SSRF protection blocks private/loopback/metadata endpoints."""
+        blocked_urls = [
+            "http://localhost:8080/dashboard",
+            "http://127.0.0.1/admin",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.1/internal",
+            "http://192.168.1.1/router",
+            "http://172.16.0.5/api",
+            "http://[::1]/status",
+            "http://metadata.google.internal/computeMetadata/v1/",
+        ]
+        for b_url in blocked_urls:
+            self.assertFalse(_is_safe_url(b_url), f"URL should be blocked for SSRF: {b_url}")
+
+        allowed_urls = [
+            "https://example.com",
+            "https://public-corp.org/login",
+            "http://safe-site.net/products",
+        ]
+        for a_url in allowed_urls:
+            self.assertTrue(_is_safe_url(a_url), f"URL should be allowed: {a_url}")
+
+        session = MagicMock()
+        html, final_url, soup, errors = _fetch_webpage_safe("http://127.0.0.1:8080/admin", session)
+        self.assertIsNone(html)
+        self.assertTrue(any("SSRF" in err for err in errors))
+
+        res, raw_bytes = _capture_screenshot("http://169.254.169.254/latest/meta-data/")
+        self.assertEqual(res["status"], "not_available")
+        self.assertIn("SSRF", res.get("error", ""))
+
+    def test_22_evidence_schema_and_ledger(self):
+        """Test 22: Validate all 7 evidence items and Evidence Ledger ingestion."""
+        from services.evidence_schema import validate_evidence_item
+        from services.evidence_normalizer import normalize_evidence_item
+        from services.evidence_ledger import EvidenceLedger
+
+        with patch("agents.agent10_visual.requests.Session") as mock_session_cls, \
+             patch("agents.agent10_visual._capture_screenshot") as mock_screenshot, \
+             patch("agents.agent10_visual._extract_ocr_text") as mock_ocr:
+
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://test-portal.org"
+            mock_resp.iter_content.return_value = [MOCK_DECEPTIVE_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            mock_screenshot.return_value = ({"status": "completed", "screenshot_captured": True, "width": 1920, "height": 1080}, b"fake_png")
+            mock_ocr.return_value = {"status": "completed", "text": "100% secure act now", "detected_terms": ["Act Now"]}
+
+            result = analyze_visual("https://test-portal.org")
+            evidence = result.get("evidence", [])
+            self.assertEqual(len(evidence), 7)
+
+            expected_ids = [f"E10-{i:02d}" for i in range(1, 8)]
+            actual_ids = [e["evidence_id"] for e in evidence]
+            self.assertEqual(actual_ids, expected_ids)
+
+            for item in evidence:
+                is_valid, errors = validate_evidence_item(item)
+                self.assertTrue(is_valid, f"Item {item.get('evidence_id')} failed validation: {errors}")
+                norm_ev = normalize_evidence_item(item, agent_identifier="A10", agent_result=result)
+                self.assertIsNotNone(norm_ev)
+                self.assertEqual(norm_ev["evidence_id"], item["evidence_id"])
+
+            ledger = EvidenceLedger(target="https://test-portal.org")
+            ledger.add_entries_from_agent(result)
+            self.assertEqual(len(ledger.entries), 7)
+            self.assertEqual(len(ledger.get_entries(agent_id=10)), 7)
+
+    def test_23_strict_schema_no_scores(self):
+        """Test 23: Agent 10 response MUST NOT calculate final trust or risk scores."""
+        with patch("agents.agent10_visual.requests.Session") as mock_session_cls, \
+             patch("agents.agent10_visual._capture_screenshot") as mock_screenshot:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://example.com"
+            mock_resp.iter_content.return_value = [MOCK_CLEAN_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+            mock_screenshot.return_value = ({"status": "not_available", "screenshot_captured": False}, None)
+
+            result = analyze_visual("https://example.com")
+            forbidden_keys = [
+                "trust_score", "trustscore", "risk_score", "riskscore",
+                "phishing_probability", "verdict", "final_score", "classification"
+            ]
+            for key in forbidden_keys:
+                self.assertNotIn(key, result, f"Agent 10 response MUST NOT contain forbidden score/verdict key '{key}'")
+
+    def test_24_a9_a10_scope_separation(self):
+        """Test 24: A10 inspects UI/visual presence without claiming brand ownership or trademark impersonation."""
+        soup = BeautifulSoup(MOCK_DECEPTIVE_HTML, "html.parser")
+        payments, _ = _detect_payment_logos(soup, MOCK_DECEPTIVE_HTML, "", "https://example.com")
+        # A10 reports whether a checkout integration mechanism exists for the payment logo, not brand ownership
+        for p in payments["detected"]:
+            self.assertIn("has_checkout_integration", p)
+            self.assertIn("verification", p)
+
+    def test_25_tce_integration_and_polarity(self):
+        """Test 25: Validate TCE integration and polarity evaluation for A10 evidence."""
+        from services.trust_calculation_engine import TrustCalculationEngine
+        from services.evidence_ledger import EvidenceLedger
+
+        with patch("agents.agent10_visual.requests.Session") as mock_session_cls, \
+             patch("agents.agent10_visual._capture_screenshot") as mock_screenshot, \
+             patch("agents.agent10_visual._extract_ocr_text") as mock_ocr:
+
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://deceptive-portal.com"
+            mock_resp.iter_content.return_value = [MOCK_DECEPTIVE_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            mock_screenshot.return_value = ({"status": "completed", "screenshot_captured": True, "width": 1920, "height": 1080}, b"fake_png")
+            mock_ocr.return_value = {"status": "completed", "text": "act now", "detected_terms": ["Act Now"]}
+
+            result = analyze_visual("https://deceptive-portal.com")
+            ledger = EvidenceLedger(target="https://deceptive-portal.com")
+            ledger.add_entries_from_agent(result)
+
+            tce = TrustCalculationEngine()
+            tce_output = tce.calculate_trust(ledger)
+            self.assertIn("trust_score", tce_output)
+            self.assertIn("risk_score", tce_output)
+            self.assertIn("verdict", tce_output)
+
+    def test_26_image_decompression_bomb_protection(self):
+        """Test 26: Pillow image handling configures decompression protection."""
+        from agents.agent10_visual import _PIL_AVAILABLE
+        if _PIL_AVAILABLE:
+            from PIL import Image
+            self.assertIsNotNone(Image.MAX_IMAGE_PIXELS)
+            self.assertLessEqual(Image.MAX_IMAGE_PIXELS, 100_000_000)
 
 
 if __name__ == "__main__":

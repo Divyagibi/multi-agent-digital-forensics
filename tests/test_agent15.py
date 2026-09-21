@@ -23,8 +23,14 @@ from agents.agent15_trust import (
     search_scam_complaints_and_forums,
     detect_recurring_patterns,
     detect_review_anomalies,
-    build_evidence_timeline
+    build_evidence_timeline,
+    _is_safe_url
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
+from services.trust_calculation_engine import TrustCalculationEngine
 from app import app
 
 
@@ -409,6 +415,100 @@ class TestAgent15UserTrust(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn("error", data)
 
+    # 21. SSRF Protection & Safety Checks
+    def test_23_ssrf_protection_and_safety_checks(self):
+        """Verify SSRF filters block private networks, localhost, link-local, cloud metadata."""
+        self.assertFalse(_is_safe_url("http://localhost/review"))
+        self.assertFalse(_is_safe_url("http://127.0.0.1:8080/trust"))
+        self.assertFalse(_is_safe_url("http://169.254.169.254/latest/meta-data/"))
+        self.assertFalse(_is_safe_url("http://10.0.0.1/admin"))
+        self.assertFalse(_is_safe_url("http://192.168.1.1/feedback"))
+        self.assertFalse(_is_safe_url("http://metadata.google.internal/computeMetadata/v1/"))
+        self.assertTrue(_is_safe_url("https://example.com/"))
+
+        # Verify analyze_user_trust rejects SSRF target
+        res = analyze_user_trust("http://127.0.0.1:5000/internal")
+        self.assertEqual(res["status"], "completed")
+        self.assertTrue(any("SSRF" in str(err) for err in res["errors"]))
+
+    # 22. Common Evidence Schema & Evidence Ledger Ingestion
+    @patch("agents.agent15_trust.requests.get")
+    def test_24_common_evidence_schema_and_ledger_ingestion(self, mock_get):
+        """Verify that all A15 evidence items validate and ingest into EvidenceLedger."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><head><title>Test Store</title></head></html>"
+        mock_resp.json.return_value = {"data": {"children": []}}
+        mock_get.return_value = mock_resp
+
+        result = analyze_user_trust("https://example.com")
+        self.assertTrue(validate_agent_result(result))
+
+        ledger = EvidenceLedger()
+        for ev in result["evidence"]:
+            self.assertTrue(validate_evidence_item(ev))
+            self.assertIn("category", ev)
+            norm = normalize_evidence_item(ev, "A15", "https://example.com")
+            ledger.add_entry(norm)
+
+        self.assertEqual(len(ledger.entries), len(result["evidence"]))
+
+    # 23. Strict Absence of Forbidden Scores / Verdicts
+    @patch("agents.agent15_trust.requests.get")
+    def test_25_no_forbidden_agent_scores_or_verdicts(self, mock_get):
+        """Verify A15 emits only forensic observations and no agent-level risk scores or verdicts."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><head><title>Test Store</title></head></html>"
+        mock_resp.json.return_value = {"data": {"children": []}}
+        mock_get.return_value = mock_resp
+
+        result = analyze_user_trust("https://example.com")
+        forbidden = {"trust_score", "risk_score", "is_scam", "is_legitimate", "final_verdict", "risk_level"}
+        for k in forbidden:
+            self.assertNotIn(k, result)
+            self.assertNotIn(k, result.get("data", {}))
+
+    # 24. TCE Polarity Resolution
+    @patch("agents.agent15_trust.requests.get")
+    def test_26_tce_integration_and_polarity_resolution(self, mock_get):
+        """Verify that all A15 evidence item categories resolve cleanly in TCE polarity taxonomy."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><head><title>Test Store</title></head></html>"
+        mock_resp.json.return_value = {"data": {"children": []}}
+        mock_get.return_value = mock_resp
+
+        result = analyze_user_trust("https://example.com")
+        for ev in result["evidence"]:
+            cat = ev.get("category")
+            polarity = resolve_evidence_polarity(cat, ev.get("finding", ""))
+            self.assertIn(polarity, {"risk_reducing", "risk_increasing", "neutral"})
+
+    # 26. DEF-10: Review Sentiment and Community Discussion Mapping
+    @patch("agents.agent15_trust.requests.get")
+    def test_28_regression_def10_review_sentiment_mapping(self, mock_get):
+        """DEF-10: Verify that general negative community discussions are mapped to public_complaints_found with low severity, not scam_fraud_keywords."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = "<html><head><title>Test Store</title></head></html>"
+        # Mock negative reddit discussion
+        mock_resp.json.return_value = {
+            "data": {
+                "children": [
+                    {"data": {"title": "Terrible customer service delay complaint, worst support", "selftext": "Avoid this store due to terrible customer service and awful delay", "score": 5, "num_comments": 2, "permalink": "/r/reviews/1"}}
+                ]
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        result = analyze_user_trust("https://example.com")
+        e15_03 = next((e for e in result["evidence"] if e.get("evidence_id") == "E15-03"), None)
+        self.assertIsNotNone(e15_03)
+        self.assertEqual(e15_03.get("category"), "public_complaints_found")
+        self.assertEqual(e15_03.get("severity"), "low")
+
 
 if __name__ == "__main__":
     unittest.main()
+

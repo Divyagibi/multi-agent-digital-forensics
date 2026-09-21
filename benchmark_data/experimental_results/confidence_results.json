@@ -1,0 +1,11 @@
+{
+  "m0_conditional_balanced_accuracy": 0.967741935483871,
+  "m0_overall_abstention_rate": 0.0,
+  "m0_unconstrained_balanced_accuracy": 0.967741935483871,
+  "partition_selective_accuracy": {
+    "development_calibration": 0.9718614718614719,
+    "final_test": 0.9732142857142857,
+    "validation": 0.9545454545454546
+  },
+  "review_threshold": 35.0
+}

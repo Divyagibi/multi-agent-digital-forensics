@@ -109,8 +109,9 @@ POLARITY_RULES: Dict[str, Set[str]] = {
         # Technical & Domain anomalies
         "domain_age_young", "domain_registered_recently", "dnssec_disabled",
         "self_signed_certificate", "expired_certificate", "invalid_certificate_chain",
-        "open_sensitive_port", "missing_security_headers", "excessive_subdomains",
-        "url_shortener_redirect"
+        "open_sensitive_port", "open_directory_listing", "missing_security_headers", "excessive_subdomains",
+        "url_shortener_redirect", "hidden_redirect_parameter", "qr_visual_modification",
+        "public_scam_discussion_found", "public_complaints_found"
     },
     "risk_reducing": {
         # Long establishment & legitimate tenure
@@ -122,14 +123,23 @@ POLARITY_RULES: Dict[str, Set[str]] = {
         # Verified business & corporate presence
         "company_registration_verified", "tax_registration_verified", "gst_vat_verified",
         "physical_address_verified", "phone_verified", "social_presence_verified",
-        "established_brand_official_domain", "positive_consumer_reputation"
+        "established_brand_official_domain", "positive_consumer_reputation",
+        "public_repository_present"
     },
     "neutral": {
         # Standard baseline telemetry
         "standard_port_open", "page_language_detected", "server_banner_detected",
         "framework_detected", "meta_title_present", "meta_description_present",
         "content_length_normal", "cookie_banner_present", "clean_dns_resolution",
-        "standard_tls_version", "qr_format_parsed", "analytics_tracker_detected"
+        "standard_tls_version", "qr_format_parsed", "analytics_tracker_detected",
+        "clean_download_analysis", "clean_static_scripts", "restricted_target_network",
+        "clean_qr_destination", "clean_http_route", "clean_query_parameters",
+        "clean_qr_image_structure", "business_identity_declared", "no_business_identity_disclosed",
+        "free_webmail_contact", "contact_email_aligned", "no_contact_disclosed",
+        "identity_cross_check_aligned", "osint_identity_resolved", "no_osint_presence_found",
+        "no_social_presence_found", "no_repository_found", "no_public_discussions_found",
+        "no_media_coverage_found", "no_public_reviews_found", "public_discussions_found",
+        "osint_identity_unverified"
     }
 }
 

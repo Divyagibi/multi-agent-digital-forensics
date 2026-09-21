@@ -661,31 +661,38 @@ def analyze_ssl(url: str) -> dict:
 
     # Step 8: Compile structured evidence items
     evidence = []
-    evidence.append(create_evidence_item("A3", 1, "HTTPS availability", data["https_availability"].get("available", False), severity="info" if data["https_availability"].get("available") else "high", source="TLS handshake", evidence_type="deterministic", metadata=data["https_availability"]))
+    is_https = data["https_availability"].get("available", False)
+    evidence.append(create_evidence_item("A3", 1, "HTTPS availability", is_https, severity="info" if is_https else "high", source="TLS handshake", evidence_type="deterministic", metadata=data["https_availability"], category="standard_tls_version" if is_https else "missing_security_headers"))
     
     tls_ver = data.get("tls_version")
     if tls_ver and tls_ver != "Not Available":
-        t_sev = "info" if tls_ver in ("TLSv1.2", "TLSv1.3") else "medium"
-        evidence.append(create_evidence_item("A3", 2, "Negotiated TLS version", tls_ver, severity=t_sev, source="TLS handshake", evidence_type="deterministic"))
+        is_modern_tls = tls_ver in ("TLSv1.2", "TLSv1.3")
+        t_sev = "info" if is_modern_tls else "medium"
+        evidence.append(create_evidence_item("A3", 2, "Negotiated TLS version", tls_ver, severity=t_sev, source="TLS handshake", evidence_type="deterministic", category="standard_tls_version"))
     
     cipher_info = data.get("cipher_suite", {})
     if isinstance(cipher_info, dict) and cipher_info.get("name") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A3", 3, "Negotiated cipher suite", cipher_info.get("name"), severity="info", source="TLS handshake", evidence_type="deterministic", metadata=cipher_info))
+        evidence.append(create_evidence_item("A3", 3, "Negotiated cipher suite", cipher_info.get("name"), severity="info", source="TLS handshake", evidence_type="deterministic", metadata=cipher_info, category="standard_tls_version"))
         
     if data["ssl_certificate"].get("issuer"):
-        evidence.append(create_evidence_item("A3", 4, "Certificate authority issuer", data["ssl_certificate"]["issuer"], severity="info", source="TLS certificate", evidence_type="deterministic", metadata={"issuer_full": data["ssl_certificate"].get("issuer_full")}))
+        evidence.append(create_evidence_item("A3", 4, "Certificate authority issuer", data["ssl_certificate"]["issuer"], severity="info", source="TLS certificate", evidence_type="deterministic", metadata={"issuer_full": data["ssl_certificate"].get("issuer_full")}, category="standard_tls_version"))
         
     if data["certificate_validity"].get("status"):
-        val_sev = "info" if data["certificate_validity"].get("valid") else "high"
-        evidence.append(create_evidence_item("A3", 5, "Certificate validity status", data["certificate_validity"]["status"], severity=val_sev, source="TLS certificate", evidence_type="deterministic", metadata=data["certificate_validity"]))
+        is_valid_cert = bool(data["certificate_validity"].get("valid"))
+        val_sev = "low" if is_valid_cert else "high"
+        val_cat = "valid_ca_signed_certificate" if is_valid_cert else "invalid_certificate_chain"
+        evidence.append(create_evidence_item("A3", 5, "Certificate validity status", data["certificate_validity"]["status"], severity=val_sev, source="TLS certificate", evidence_type="deterministic", evidence_strength=0.85 if is_valid_cert else 0.85, metadata=data["certificate_validity"], category=val_cat))
         
     if data["certificate_expiration"].get("days_remaining") not in ("Not Available", None):
         d_rem = data["certificate_expiration"]["days_remaining"]
         exp_sev = "high" if (isinstance(d_rem, (int, float)) and d_rem < 0) else ("medium" if (isinstance(d_rem, (int, float)) and d_rem < 15) else "info")
-        evidence.append(create_evidence_item("A3", 6, "Certificate expiration days remaining", d_rem, severity=exp_sev, source="TLS certificate", evidence_type="deterministic", metadata=data["certificate_expiration"]))
+        exp_cat = "expired_certificate" if (isinstance(d_rem, (int, float)) and d_rem < 0) else "standard_tls_version"
+        evidence.append(create_evidence_item("A3", 6, "Certificate expiration days remaining", d_rem, severity=exp_sev, source="TLS certificate", evidence_type="deterministic", metadata=data["certificate_expiration"], category=exp_cat))
         
-    evidence.append(create_evidence_item("A3", 7, "Certificate Transparency SCT logging", data["certificate_transparency"].get("found", False), severity="info", source="TLS certificate", evidence_type="deterministic", metadata=data["certificate_transparency"]))
-    evidence.append(create_evidence_item("A3", 8, "HTTP Strict Transport Security (HSTS)", data["hsts"].get("enabled", False), severity="info" if data["hsts"].get("enabled") else "low", source="HTTP headers", evidence_type="deterministic", metadata=data["hsts"]))
+    evidence.append(create_evidence_item("A3", 7, "Certificate Transparency SCT logging", data["certificate_transparency"].get("found", False), severity="info", source="TLS certificate", evidence_type="deterministic", metadata=data["certificate_transparency"], category="standard_tls_version"))
+    
+    is_hsts = bool(data["hsts"].get("enabled", False))
+    evidence.append(create_evidence_item("A3", 8, "HTTP Strict Transport Security (HSTS)", is_hsts, severity="low" if is_hsts else "info", source="HTTP headers", evidence_type="deterministic", metadata=data["hsts"], category="hsts_preloaded" if is_hsts else "missing_security_headers"))
 
     # Step 9: Determine overall status
     if data["https_availability"]["available"] and data["ssl_certificate"]["present"]:

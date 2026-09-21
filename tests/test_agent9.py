@@ -17,6 +17,10 @@ from agents.agent9_brand import (
     _color_distance,
     _calculate_dhash,
     _dhash_similarity,
+    _is_safe_url,
+    _damerau_levenshtein_distance,
+    _fetch_webpage_safe,
+    _download_image_safe,
     _match_brand_names,
     _detect_and_analyze_logo,
     _detect_and_analyze_favicon,
@@ -348,6 +352,194 @@ class TestAgent9Brand(unittest.TestCase):
         brands = [b["brand"] for b in res["candidate_brands"]]
         self.assertIn("Microsoft", brands)
 
+    def test_26_evidence_schema_and_ledger(self):
+        """Test 26: Validate all 7 evidence items and Evidence Ledger ingestion."""
+        from services.evidence_schema import validate_evidence_item
+        from services.evidence_normalizer import normalize_evidence_item
+        from services.evidence_ledger import EvidenceLedger
+
+        with patch("agents.agent9_brand.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://phish-login.com"
+            mock_resp.iter_content.return_value = [MOCK_MICROSOFT_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_brand("https://phish-login.com")
+            evidence = result.get("evidence", [])
+            self.assertEqual(len(evidence), 7)
+
+            expected_ids = [f"E9-{i:02d}" for i in range(1, 8)]
+            actual_ids = [e["evidence_id"] for e in evidence]
+            self.assertEqual(actual_ids, expected_ids)
+
+            for item in evidence:
+                is_valid, errors = validate_evidence_item(item)
+                self.assertTrue(is_valid, f"Item {item.get('evidence_id')} failed validation: {errors}")
+                norm_ev = normalize_evidence_item(item, agent_identifier="A9", agent_result=result)
+                self.assertIsNotNone(norm_ev)
+                self.assertEqual(norm_ev["evidence_id"], item["evidence_id"])
+
+            ledger = EvidenceLedger(target="https://phish-login.com")
+            ledger.add_entries_from_agent(result)
+            self.assertEqual(len(ledger.entries), 7)
+            self.assertEqual(len(ledger.get_entries(agent_id=9)), 7)
+
+    def test_27_tce_integration_and_polarity(self):
+        """Test 27: Validate TCE integration and polarity evaluation."""
+        from services.trust_calculation_engine import TrustCalculationEngine
+        from services.evidence_ledger import EvidenceLedger
+
+        with patch("agents.agent9_brand.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://phish-brand-portal.com"
+            mock_resp.iter_content.return_value = [MOCK_MICROSOFT_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_brand("https://phish-brand-portal.com")
+            ledger = EvidenceLedger(target="https://phish-brand-portal.com")
+            ledger.add_entries_from_agent(result)
+
+            tce = TrustCalculationEngine()
+            tce_output = tce.calculate_trust(ledger)
+            self.assertIn("trust_score", tce_output)
+            self.assertIn("risk_score", tce_output)
+            self.assertIn("verdict", tce_output)
+            # Domain mismatch should generate risk in TCE
+            self.assertGreater(tce_output["risk_score"], 0.0)
+
+    def test_28_homoglyph_and_lookalike_domain_handling(self):
+        """Test 28: Compare lookalike / homoglyph domain with official brand domain."""
+        res_typo, _ = _compare_official_domain("https://micros0ft.com", ["Microsoft"])
+        self.assertEqual(res_typo["status"], "compared")
+        self.assertFalse(res_typo["same_domain"])
+
+        res_genuine, _ = _compare_official_domain("https://login.microsoftonline.com", ["Microsoft"])
+        self.assertEqual(res_genuine["status"], "compared")
+        self.assertTrue(res_genuine["same_domain"])
+
+    def test_29_generic_page_no_false_positive_brand(self):
+        """Test 29: Plain generic page produces no candidate brand and clean evidence."""
+        soup = BeautifulSoup(MOCK_GENERIC_HTML, "html.parser")
+        res, ev = _match_brand_names(soup, "https://my-ordinary-blog.org")
+        self.assertFalse(res["detected"])
+        self.assertEqual(len(res["candidate_brands"]), 0)
+
+    def test_30_strict_schema_no_scores(self):
+        """Test 30: Agent 9 response MUST NOT calculate final trust or risk scores."""
+        with patch("agents.agent9_brand.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://example.com"
+            mock_resp.iter_content.return_value = [MOCK_GENERIC_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_brand("https://example.com")
+            forbidden_keys = [
+                "trust_score", "trustscore", "risk_score", "riskscore",
+                "phishing_probability", "verdict", "final_score", "classification"
+            ]
+            for key in forbidden_keys:
+                self.assertNotIn(key, result, f"Agent 9 response MUST NOT contain forbidden score/verdict key '{key}'")
+
+    def test_31_ssrf_protection_blocked_endpoints(self):
+        """Test 31: Verify SSRF protection blocks private, loopback, and cloud metadata addresses."""
+        blocked_urls = [
+            "http://localhost:8080/logo.png",
+            "http://127.0.0.1/favicon.ico",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.1/auth/logo.png",
+            "http://192.168.1.1/admin/logo.png",
+            "http://172.16.0.5/logo.png",
+            "http://[::1]/logo.png",
+            "http://metadata.google.internal/computeMetadata/v1/",
+        ]
+        for b_url in blocked_urls:
+            self.assertFalse(_is_safe_url(b_url), f"URL should be blocked for SSRF: {b_url}")
+
+        allowed_urls = [
+            "https://example.com/logo.png",
+            "https://login.microsoftonline.com/favicon.ico",
+            "http://public-site.org/assets/logo.svg",
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        ]
+        for a_url in allowed_urls:
+            self.assertTrue(_is_safe_url(a_url), f"URL should be allowed: {a_url}")
+
+    def test_32_damerau_levenshtein_distance(self):
+        """Test 32: Validate Damerau-Levenshtein distance calculations."""
+        # Exact match
+        self.assertEqual(_damerau_levenshtein_distance("paypal", "paypal"), 0)
+        # Substitution
+        self.assertEqual(_damerau_levenshtein_distance("paypa1", "paypal"), 1)
+        self.assertEqual(_damerau_levenshtein_distance("micros0ft", "microsoft"), 1)
+        # Transposition
+        self.assertEqual(_damerau_levenshtein_distance("microsfot", "microsoft"), 1)
+        # Insertion
+        self.assertEqual(_damerau_levenshtein_distance("faceboook", "facebook"), 1)
+        # Deletion
+        self.assertEqual(_damerau_levenshtein_distance("amazn", "amazon"), 1)
+        # Multiple edits
+        self.assertEqual(_damerau_levenshtein_distance("paypa11", "paypal"), 2)
+
+    def test_33_typosquatting_detection_lookalike_domains(self):
+        """Test 33: Typosquatting detection flags lookalike domain variants."""
+        # 1-edit distance lookalike: paypa1.com vs paypal.com
+        res, ev = _compare_official_domain("https://paypa1.com/login", ["PayPal"])
+        self.assertEqual(res["status"], "compared")
+        self.assertFalse(res["same_domain"])
+        self.assertIn("typosquatting", res)
+        self.assertTrue(res["typosquatting"]["detected"])
+        self.assertEqual(res["typosquatting"]["edit_distance"], 1)
+
+        # 1-edit distance lookalike: micros0ft.com vs microsoft.com
+        res_ms, ev_ms = _compare_official_domain("https://micros0ft.com/account", ["Microsoft"])
+        self.assertFalse(res_ms["same_domain"])
+        self.assertTrue(res_ms["typosquatting"]["detected"])
+        self.assertEqual(res_ms["typosquatting"]["edit_distance"], 1)
+
+        # Genuine official domain has edit_distance 0 and detected False
+        res_gen, _ = _compare_official_domain("https://paypal.com/signin", ["PayPal"])
+        self.assertTrue(res_gen["same_domain"])
+        self.assertFalse(res_gen["typosquatting"]["detected"])
+        self.assertEqual(res_gen["typosquatting"]["edit_distance"], 0)
+
+    def test_34_ssrf_in_webpage_and_image_fetching(self):
+        """Test 34: _fetch_webpage_safe and _download_image_safe reject SSRF targets."""
+        session = MagicMock()
+        # Fetching internal metadata
+        html, final_url, soup, errors = _fetch_webpage_safe("http://169.254.169.254/latest/meta-data/", session)
+        self.assertIsNone(html)
+        self.assertTrue(any("SSRF" in err for err in errors))
+
+        # Downloading image from internal host
+        from agents.agent9_brand import _download_image_safe
+        img_bytes, img_fmt, dims = _download_image_safe("http://127.0.0.1:8000/secret.png", session)
+        self.assertIsNone(img_bytes)
+
+    def test_35_image_decompression_bomb_handling(self):
+        """Test 35: Pillow image handling configures decompression protection."""
+        from agents.agent9_brand import _PIL_AVAILABLE
+        if _PIL_AVAILABLE:
+            from PIL import Image
+            self.assertIsNotNone(Image.MAX_IMAGE_PIXELS)
+            self.assertLessEqual(Image.MAX_IMAGE_PIXELS, 100_000_000)
+
+    def test_36_multi_brand_evidence_integrity(self):
+        """Test 36: Multi-brand pages report detected candidate brands without crashing."""
+        soup = BeautifulSoup(MOCK_MULTI_BRAND_HTML, "html.parser")
+        res, ev = _match_brand_names(soup, "https://example-gateway.com")
+        self.assertTrue(res["detected"])
+        brands = [b["brand"] for b in res["candidate_brands"]]
+        self.assertIn("Google", brands)
+        self.assertIn("PayPal", brands)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+

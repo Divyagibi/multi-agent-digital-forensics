@@ -180,7 +180,7 @@ def extract_company_name_evidence(soup: BeautifulSoup, base_url: str) -> dict:
 
     # 3. Footer Copyright Information
     copyright_pattern = re.compile(
-        r"(?:©|&copy;|copyright|\(c\))\s*(?:\d{4}(?:\s*-\s*\d{4})?)?\s*([A-Za-z0-9\s,\.\-&]{3,45}?)(?:\.|\b|all rights|inc|ltd|corp)",
+        r"(?:©|&copy;|copyright|\(c\))\s*(?:\d{4}(?:\s*-\s*\d{4})?)?\s*([A-Za-z0-9\s,\.\-&]{3,60}?)(?:\.|\n|all rights reserved|all rights|$)",
         re.IGNORECASE
     )
     footer = soup.find("footer")
@@ -626,18 +626,56 @@ def analyze_content(url: str) -> dict:
     print(f"[Agent 4] Links checked: {checked_count}, Broken links found: {len(broken_links)}")
 
     # Step 12: Compile structured evidence items
+    is_antibot = (
+        response.status_code == 403
+        or any(k in (data["page_title"].get("value") or "").lower() for k in ["recaptcha", "just a moment", "challenge", "attention required", "blocked", "captcha"])
+    )
+
     evidence = []
     if data["page_title"].get("present"):
-        evidence.append(create_evidence_item("A4", 1, "Webpage title", data["page_title"].get("value"), severity="info", source="Website HTML", evidence_type="deterministic", metadata=data["page_title"]))
+        evidence.append(create_evidence_item(
+            agent_id="A4", index=1, finding="Webpage title", value=data["page_title"].get("value"),
+            severity="info", source="Website HTML", evidence_type="deterministic",
+            metadata=data["page_title"], category="meta_title_present"
+        ))
     if data["meta_description"].get("present"):
-        evidence.append(create_evidence_item("A4", 2, "Meta description", data["meta_description"].get("value"), severity="info", source="Website HTML", evidence_type="deterministic", metadata=data["meta_description"]))
+        evidence.append(create_evidence_item(
+            agent_id="A4", index=2, finding="Meta description", value=data["meta_description"].get("value"),
+            severity="info", source="Website HTML", evidence_type="deterministic",
+            metadata=data["meta_description"], category="meta_description_present"
+        ))
     if data["language"].get("name"):
-        evidence.append(create_evidence_item("A4", 3, "Detected website language", data["language"].get("name"), severity="info", source="Website HTML", evidence_type="deterministic", metadata=data["language"]))
+        evidence.append(create_evidence_item(
+            agent_id="A4", index=3, finding="Detected website language", value=data["language"].get("name"),
+            severity="info", source="Website HTML", evidence_type="deterministic",
+            metadata=data["language"], category="page_language_detected"
+        ))
     if data["company_name"].get("value"):
-        evidence.append(create_evidence_item("A4", 4, "Extracted company name", data["company_name"].get("value"), severity="info", source="Website HTML", evidence_type="deterministic", metadata=data["company_name"]))
+        evidence.append(create_evidence_item(
+            agent_id="A4", index=4, finding="Extracted company name", value=data["company_name"].get("value"),
+            severity="info", source="Website HTML", evidence_type="deterministic",
+            metadata=data["company_name"], category="business_identity_declared"
+        ))
     if data["missing_pages"]:
-        evidence.append(create_evidence_item("A4", 5, "Missing standard policy pages", data["missing_pages"], severity="low" if len(data["missing_pages"]) > 3 else "info", source="Website HTML", evidence_type="deterministic"))
-    evidence.append(create_evidence_item("A4", 6, "Broken internal links count", len(data["broken_links"]), severity="low" if data["broken_links"] else "info", source="Website HTML", evidence_type="deterministic", metadata={"broken_links": data["broken_links"], "links_checked": data.get("links_checked", 0)}))
+        if is_antibot:
+            evidence.append(create_evidence_item(
+                agent_id="A4", index=5, finding="Anti-bot / crawler challenge page encountered during fetch",
+                value="Anti-bot challenge response", severity="info", source="Website HTML",
+                evidence_type="deterministic", category="cookie_banner_present"
+            ))
+        else:
+            evidence.append(create_evidence_item(
+                agent_id="A4", index=5, finding="Missing standard policy pages", value=data["missing_pages"],
+                severity="info", source="Website HTML", evidence_type="deterministic",
+                category="meta_description_present"
+            ))
+    evidence.append(create_evidence_item(
+        agent_id="A4", index=6, finding="Broken internal links count", value=len(data["broken_links"]),
+        severity="low" if (data["broken_links"] and not is_antibot) else "info",
+        source="Website HTML", evidence_type="deterministic",
+        metadata={"broken_links": data["broken_links"], "links_checked": data.get("links_checked", 0)},
+        category="clean_static_scripts" if not data["broken_links"] else "content_length_normal"
+    ))
 
     # Determine overall status
     if response.status_code == 200 and data["page_title"]["present"]:

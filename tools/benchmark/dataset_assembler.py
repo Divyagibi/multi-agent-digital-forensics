@@ -480,7 +480,14 @@ class DatasetAssembler:
                     )
 
                 ti_meta = (ti_overlap_records or {}).get(tgt_id) or (ti_overlap_records or {}).get(cand_id) or TIOverlapMetadata()
-                qr_meta = (qr_relationships or {}).get(rec_id) or (qr_relationships or {}).get(cand_id) or QRRelationshipMetadata()
+                qr_meta = (qr_relationships or {}).get(rec_id) or (qr_relationships or {}).get(cand_id)
+                if not qr_meta:
+                    if cand.modality == InputModality.QR_IMAGE:
+                        qr_meta = QRRelationshipMetadata(artifact_type="qr_image")
+                    elif cand.modality == InputModality.QR_PAYLOAD:
+                        qr_meta = QRRelationshipMetadata(artifact_type="qr_payload")
+                    else:
+                        qr_meta = QRRelationshipMetadata(artifact_type="direct_url")
 
                 eval_meta = EvaluationMetadata(
                     group_id=grp_id,

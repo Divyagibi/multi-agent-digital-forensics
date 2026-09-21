@@ -8,6 +8,7 @@ Strictly passive forensic evidence collection.
 DO NOT calculate Trust/Risk score, phishing probability, or final verdict.
 """
 
+import ipaddress
 import collections
 import datetime
 import json
@@ -57,6 +58,52 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    if url.startswith("data:image/"):
+        return True
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 # =====================================================================
 # LOAD REFERENCE DATASETS (data/scam_keywords.json)
@@ -140,8 +187,12 @@ def _extract_registered_domain(url: str) -> str:
 
 
 def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[str], Optional[str], Optional[BeautifulSoup], List[str]]:
-    """Fetch HTML page safely with strict size and timeout limits."""
+    """Fetch HTML page safely with strict size, SSRF and timeout limits."""
     errors = []
+    if not _is_safe_url(url):
+        errors.append("Blocked potentially unsafe/private URL (SSRF protection)")
+        return None, url, None, errors
+
     try:
         resp = session.get(
             url,
@@ -172,6 +223,10 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
         return None, url, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirected to potentially unsafe/private URL (SSRF protection)")
+        return None, final_url, None, errors
+
     try:
         content_chunks = []
         downloaded = 0
@@ -798,7 +853,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="DOM Text Extraction",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata={"statistics": statistics, "language": lang_info}
+        metadata={"statistics": statistics, "language": lang_info},
+        category="page_language_detected"
     ))
 
     # E11-02: Grammar & Spelling Analysis
@@ -812,7 +868,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Spellchecker & Grammar Heuristics",
         evidence_type="deterministic",
         evidence_strength=0.5 if err_count >= 3 else 0.1,
-        metadata={"grammar": grammar_result, "spelling": spelling_result}
+        metadata={"grammar": grammar_result, "spelling": spelling_result},
+        category="page_language_detected"
     ))
 
     # E11-03: AI / Formulaic Content Indicators
@@ -826,7 +883,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Stylometric AI Heuristics",
         evidence_type="inference",
         evidence_strength=0.6 if ai_strong else 0.1,
-        metadata=ai_result
+        metadata=ai_result,
+        category="ai_generated_phishing_text" if ai_strong else "page_language_detected"
     ))
 
     # E11-04: Duplicate Content
@@ -840,7 +898,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Text Token Hashing",
         evidence_type="deterministic",
         evidence_strength=0.5 if len(dup_secs) > 0 else 0.05,
-        metadata=duplicate_result
+        metadata=duplicate_result,
+        category="duplicate_scam_template" if len(dup_secs) > 0 else "page_language_detected"
     ))
 
     # E11-05: Known Scam Template Similarity
@@ -855,7 +914,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Jaccard Corpus Similarity",
         evidence_type="inference",
         evidence_strength=float(max_sim) if max_sim > 0 else None,
-        metadata=similarity_result
+        metadata=similarity_result,
+        category="duplicate_scam_template" if max_sim >= 0.25 else "page_language_detected"
     ))
 
     # E11-06: Unrealistic Claims
@@ -869,21 +929,28 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Financial Claim Pattern Heuristics",
         evidence_type="inference",
         evidence_strength=0.85 if has_claims else 0.05,
-        metadata=claims_result
+        metadata=claims_result,
+        category="unrealistic_claims" if has_claims else "page_language_detected"
     ))
 
     # E11-07: Urgency Language
-    has_urgency = bool(urgency_result.get("detected"))
+    instances = urgency_result.get("instances", [])
+    has_coercive_urgency = any(
+        inst.get("severity") in ("HIGH", "MEDIUM") and inst.get("category") != "marketing urgency"
+        for inst in instances
+    )
+    has_urgency = bool(instances)
     structured_evidence.append(create_evidence_item(
         agent_id="A11",
         index=7,
         finding="High-pressure urgency language and coercive timeline indicators",
-        value=urgency_result.get("instances", []),
-        severity="high" if has_urgency else "info",
+        value=instances,
+        severity="high" if has_coercive_urgency else "info",
         source="Urgency Phrase Lexicon",
         evidence_type="inference",
-        evidence_strength=0.8 if has_urgency else 0.05,
-        metadata=urgency_result
+        evidence_strength=0.8 if has_coercive_urgency else 0.05,
+        metadata=urgency_result,
+        category="urgency_manipulation_keywords" if has_coercive_urgency else "page_language_detected"
     ))
 
     # E11-08: Scam Keywords
@@ -897,7 +964,8 @@ def analyze_content_quality(url: str) -> Dict[str, Any]:
         source="Scam Keyword Dataset",
         evidence_type="threat_intelligence",
         evidence_strength=0.9 if has_scam else 0.05,
-        metadata=scam_result
+        metadata=scam_result,
+        category="scam_fraud_keywords" if has_scam else "page_language_detected"
     ))
 
     print("[Agent 11] Content quality analysis completed.")

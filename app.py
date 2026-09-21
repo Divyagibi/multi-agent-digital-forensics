@@ -18,7 +18,12 @@ from agents.agent15_trust import analyze_user_trust
 from agents.agent16_network import analyze_network_security
 from agents.agent17_malware import analyze_malware_indicators
 from agents.agent18_qr import analyze_qr, decode_qr_image, extract_embedded_url
-from services.analysis_pipeline import run_full_pipeline, process_qr_upload, run_single_agent
+from services.analysis_pipeline import (
+    run_full_pipeline,
+    process_qr_upload,
+    run_single_agent,
+    finalize_session_from_agent_results
+)
 from services.report_generator import generate_investigator_report
 
 app = Flask(__name__)
@@ -525,6 +530,39 @@ def pipeline_run_endpoint():
         return jsonify({"error": f"Pipeline execution failed: {str(e)}"}), 500
 
 
+@app.route("/api/pipeline/finalize", methods=["POST"])
+def pipeline_finalize_endpoint():
+    """
+    Endpoint to finalize already-collected agent results into a single completed session.
+    Executes normalization, Evidence Ledger correlation, TCE scoring, and AERE reasoning
+    WITHOUT re-executing Agents 1–18.
+    """
+    data = request.get_json() or {}
+    url = data.get("url")
+    agents = data.get("agents") or {}
+    input_type = data.get("input_type", "url")
+    original_input = data.get("original_input") or url
+    session_id = data.get("session_id")
+
+    if not url or not isinstance(url, str) or not url.strip():
+        return jsonify({"error": "Target URL is required for finalization"}), 400
+
+    if not isinstance(agents, dict) or not agents:
+        return jsonify({"error": "Agent results dictionary is required for finalization"}), 400
+
+    try:
+        session = finalize_session_from_agent_results(
+            target_url=url.strip(),
+            agent_results=agents,
+            input_type=input_type,
+            original_input=original_input,
+            session_id=session_id
+        )
+        return jsonify(session)
+    except Exception as e:
+        return jsonify({"error": f"Session finalization failed: {str(e)}"}), 500
+
+
 @app.route("/api/evidence-ledger", methods=["POST"])
 def evidence_ledger_endpoint():
     """
@@ -546,21 +584,28 @@ def evidence_ledger_endpoint():
 def report_endpoint():
     """
     Endpoint to generate the Final Investigator Report (Step 5B).
-    Accepts either an existing completed session or a target url/qr_image.
-    Returns the serialized InvestigatorReportPayload JSON.
+    Accepts an existing completed session and returns the serialized InvestigatorReportPayload JSON.
+    Does NOT rerun Agents 1–18 for valid sessions.
     """
     data = request.get_json() or {}
     session = data.get("session")
 
-    if not session:
+    if not session or not isinstance(session, dict):
         url = data.get("url")
         qr_image = data.get("qr_image")
-        if qr_image:
-            session = run_full_pipeline(input_data=qr_image, input_type="qr")
-        elif url:
-            session = run_full_pipeline(input_data=url.strip(), input_type="url")
+        # Explicit backward-compatibility flag only
+        if data.get("allow_full_pipeline_fallback") or data.get("run_pipeline"):
+            if qr_image:
+                session = run_full_pipeline(input_data=qr_image, input_type="qr")
+            elif url and isinstance(url, str) and url.strip():
+                session = run_full_pipeline(input_data=url.strip(), input_type="url")
+            else:
+                return jsonify({"error": "Session or valid target is required"}), 400
         else:
-            return jsonify({"error": "Session, URL, or QR image is required"}), 400
+            return jsonify({"error": "A valid completed investigation session is required to generate the report."}), 400
+
+    if not session.get("evidence_ledger") and not session.get("tce_summary"):
+        return jsonify({"error": "Incomplete session payload provided. Evidence ledger or TCE summary missing."}), 400
 
     confidence_payload = data.get("confidence_payload") or session.get("confidence")
 

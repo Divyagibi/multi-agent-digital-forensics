@@ -470,6 +470,169 @@ class TestAgent7Fingerprinting(unittest.TestCase):
             self.assertNotIn(key, result, f"Agent 7 response MUST NOT contain forbidden score/verdict key '{key}'")
 
 
+    # 25. Exposed Admin Panel Evidence Regression (Clean vs Detected)
+    @patch("agents.agent7_fingerprinting.fetch_webpage")
+    @patch("agents.agent7_fingerprinting.check_open_directories", return_value=[])
+    @patch("agents.agent7_fingerprinting.check_admin_panels")
+    def test_25_admin_panel_evidence_regression(self, mock_admins, mock_dirs, mock_fetch):
+        mock_fetch.return_value = {
+            "status": "success", "status_code": 200, "final_url": "https://example.com",
+            "headers": {}, "html": "<html><body>Hello</body></html>",
+            "redirect_count": 0, "redirect_chain": ["https://example.com"]
+        }
+        # Case A: Clean probing - all return detected=False
+        mock_admins.return_value = [
+            {"path": "/admin", "status_code": 404, "detected": False, "final_url": "https://example.com/admin"},
+            {"path": "/login", "status_code": 404, "detected": False, "final_url": "https://example.com/login"}
+        ]
+        res_clean = analyze_fingerprint("https://example.com")
+        e7_08_clean = next((e for e in res_clean["evidence"] if e["evidence_id"] == "E7-08"), None)
+        self.assertIsNotNone(e7_08_clean)
+        self.assertEqual(e7_08_clean["value"], [])
+        self.assertEqual(e7_08_clean["severity"], "info")
+
+        # Case B: Detected admin portal - one returns detected=True
+        mock_admins.return_value = [
+            {"path": "/admin", "status_code": 200, "detected": True, "final_url": "https://example.com/admin"},
+            {"path": "/login", "status_code": 404, "detected": False, "final_url": "https://example.com/login"}
+        ]
+        res_detected = analyze_fingerprint("https://example.com")
+        e7_08_det = next((e for e in res_detected["evidence"] if e["evidence_id"] == "E7-08"), None)
+        self.assertIsNotNone(e7_08_det)
+        self.assertEqual(e7_08_det["value"], ["/admin"])
+        self.assertEqual(e7_08_det["severity"], "info")
+
+    # 26. Open Directory Listing Evidence Regression (Clean vs Detected)
+    @patch("agents.agent7_fingerprinting.fetch_webpage")
+    @patch("agents.agent7_fingerprinting.check_admin_panels", return_value=[])
+    @patch("agents.agent7_fingerprinting.check_open_directories")
+    def test_26_open_directory_evidence_regression(self, mock_dirs, mock_admins, mock_fetch):
+        mock_fetch.return_value = {
+            "status": "success", "status_code": 200, "final_url": "https://example.com",
+            "headers": {}, "html": "<html><body>Hello</body></html>",
+            "redirect_count": 0, "redirect_chain": ["https://example.com"]
+        }
+        # Case A: Clean probing - all return directory_listing=False
+        mock_dirs.return_value = [
+            {"path": "/", "status_code": 200, "directory_listing": False, "evidence": None},
+            {"path": "/uploads/", "status_code": 404, "directory_listing": False, "evidence": None}
+        ]
+        res_clean = analyze_fingerprint("https://example.com")
+        e7_09_clean = next((e for e in res_clean["evidence"] if e["evidence_id"] == "E7-09"), None)
+        self.assertIsNotNone(e7_09_clean)
+        self.assertEqual(e7_09_clean["value"], [])
+        self.assertEqual(e7_09_clean["severity"], "info")
+
+        # Case B: Detected open directory - /uploads/ returns directory_listing=True
+        mock_dirs.return_value = [
+            {"path": "/", "status_code": 200, "directory_listing": False, "evidence": None},
+            {"path": "/uploads/", "status_code": 200, "directory_listing": True, "evidence": "Index of /uploads/"}
+        ]
+        res_detected = analyze_fingerprint("https://example.com")
+        e7_09_det = next((e for e in res_detected["evidence"] if e["evidence_id"] == "E7-09"), None)
+        self.assertIsNotNone(e7_09_det)
+        self.assertEqual(e7_09_det["value"], ["/uploads/"])
+        self.assertEqual(e7_09_det["severity"], "medium")
+
+    # 27. Adversarial Text Fingerprint Resilience
+    def test_27_adversarial_text_not_fingerprinted(self):
+        html = """
+        <html>
+        <head><title>Tech Blog</title></head>
+        <body>
+            <p>We write articles about WordPress, Drupal, React, Next.js, and Django.</p>
+            <p>Our website was built using custom static HTML and CSS.</p>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        cms = detect_cms(soup, html, {})
+        self.assertEqual(cms["status"], "not_detected")
+        self.assertIsNone(cms["name"])
+
+        frameworks = detect_frameworks(soup, html, {})
+        self.assertEqual(len(frameworks), 0)
+
+    # 28. Evidence ID Inventory & Schema Validation
+    @patch("agents.agent7_fingerprinting.fetch_webpage")
+    @patch("agents.agent7_fingerprinting.check_admin_panels", return_value=[])
+    @patch("agents.agent7_fingerprinting.check_open_directories", return_value=[])
+    def test_28_evidence_id_inventory_and_schema_validation(self, mock_dirs, mock_admins, mock_fetch):
+        from services.evidence_schema import validate_evidence_item
+        mock_fetch.return_value = {
+            "status": "success", "status_code": 200, "final_url": "https://example.com",
+            "headers": {"Server": "Apache/2.4"},
+            "html": "<html><head><meta name='generator' content='WordPress 6.4'></head><body></body></html>",
+            "redirect_count": 0, "redirect_chain": ["https://example.com"]
+        }
+        result = analyze_fingerprint("https://example.com")
+        self.assertEqual(result["status"], "success")
+        evidence_list = result["evidence"]
+        self.assertEqual(len(evidence_list), 9)
+
+        expected_ids = [f"E7-{i:02d}" for i in range(1, 10)]
+        actual_ids = [e["evidence_id"] for e in evidence_list]
+        self.assertEqual(actual_ids, expected_ids)
+        self.assertEqual(len(set(actual_ids)), 9, "Evidence IDs must be strictly unique")
+
+        for item in evidence_list:
+            is_valid, err = validate_evidence_item(item)
+            self.assertTrue(is_valid, f"Item {item.get('evidence_id')} failed validation: {err}")
+
+    # 29. Normalizer, Ledger, and TCE Integration Pipeline
+    @patch("agents.agent7_fingerprinting.fetch_webpage")
+    @patch("agents.agent7_fingerprinting.check_admin_panels", return_value=[])
+    @patch("agents.agent7_fingerprinting.check_open_directories", return_value=[])
+    def test_29_normalizer_ledger_and_tce_neutrality(self, mock_dirs, mock_admins, mock_fetch):
+        from services.evidence_ledger import EvidenceLedger
+        from services.trust_calculation_engine import TrustCalculationEngine
+
+        mock_fetch.return_value = {
+            "status": "success", "status_code": 200, "final_url": "https://tech-site.example.com",
+            "headers": {"Server": "nginx/1.24"},
+            "html": "<html><head><meta name='generator' content='WordPress 6.4'></head><body></body></html>",
+            "redirect_count": 0, "redirect_chain": ["https://tech-site.example.com"]
+        }
+        result = analyze_fingerprint("https://tech-site.example.com")
+        self.assertEqual(result["status"], "success")
+
+        # Ingest into ledger
+        ledger = EvidenceLedger()
+        ledger.add_entries_from_agent(result)
+        self.assertEqual(len(ledger.entries), 9)
+
+        # Ingest into TCE
+        tce = TrustCalculationEngine()
+        tce_eval = tce.calculate_trust(ledger)
+
+        # Baseline info evidence (server banner, CMS) must remain neutral without inflating risk
+        e7_01 = next((c for c in tce_eval["evidence_contributions"] if c["evidence_id"] == "E7-01"), None)
+        e7_02 = next((c for c in tce_eval["evidence_contributions"] if c["evidence_id"] == "E7-02"), None)
+        self.assertIsNotNone(e7_01)
+        self.assertIsNotNone(e7_02)
+        self.assertEqual(e7_01["polarity"], "neutral")
+        self.assertEqual(e7_01["severity_weight"], 0.0)
+        self.assertEqual(e7_02["polarity"], "neutral")
+        self.assertEqual(e7_02["severity_weight"], 0.0)
+        self.assertEqual(tce_eval["risk_score"], 0.0)
+
+    # 30. Failed / Unavailable Fetch Handling
+    @patch("agents.agent7_fingerprinting.fetch_webpage")
+    @patch("agents.agent7_fingerprinting.check_admin_panels", return_value=[])
+    @patch("agents.agent7_fingerprinting.check_open_directories", return_value=[])
+    def test_30_fetch_failure_handling(self, mock_dirs, mock_admins, mock_fetch):
+        mock_fetch.return_value = {
+            "status": "error", "status_code": None, "final_url": "https://unreachable.example.com",
+            "headers": {}, "html": "", "message": "Failed to resolve hostname",
+            "redirect_count": 0, "redirect_chain": ["https://unreachable.example.com"]
+        }
+        result = analyze_fingerprint("https://unreachable.example.com")
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Failed to resolve hostname", result["errors"])
+        self.assertEqual(result["web_server"]["status"], "not_detected")
+        self.assertEqual(result["cms"]["status"], "not_detected")
+
+
 def run_all_tests():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestAgent7Fingerprinting)
     runner = unittest.TextTestRunner(verbosity=2)
@@ -487,3 +650,4 @@ def run_all_tests():
 if __name__ == "__main__":
     success = run_all_tests()
     sys.exit(0 if success else 1)
+

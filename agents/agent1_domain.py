@@ -587,8 +587,8 @@ def analyze_domain(url: str) -> dict:
             "domain_status": []
         }
         evidence = [
-            create_evidence_item("A1", 1, "Domain name", domain, severity="info", source="RDAP", evidence_type="deterministic"),
-            create_evidence_item("A1", 2, "WHOIS/RDAP availability", False, severity="info", source="RDAP", evidence_type="deterministic", metadata={"availability": "unavailable", "error": rdap_error})
+            create_evidence_item("A1", 1, "Domain name", domain, severity="info", source="RDAP", evidence_type="deterministic", category="domain_name_telemetry"),
+            create_evidence_item("A1", 6, "WHOIS/RDAP availability", False, severity="info", source="RDAP", evidence_type="deterministic", metadata={"availability": "unavailable", "error": rdap_error}, category="whois_availability_telemetry")
         ]
         return build_agent_result(
             agent_identifier="A1",
@@ -727,32 +727,41 @@ def analyze_domain(url: str) -> dict:
     # Step 6: Compile structured evidence items
     # ------------------------------------------------------------------
     evidence = []
-    evidence.append(create_evidence_item("A1", 1, "Domain name", domain, severity="info", source="RDAP", evidence_type="deterministic"))
+    evidence.append(create_evidence_item("A1", 1, "Domain name", domain, severity="info", source="RDAP", evidence_type="deterministic", category="domain_name_telemetry"))
     
     age_days = data.get("domain_age_days")
     if age_days not in ("Not Available", None):
-        age_sev = "medium" if isinstance(age_days, (int, float)) and age_days < 30 else "info"
-        evidence.append(create_evidence_item("A1", 2, "Domain age", age_days, severity=age_sev, source="RDAP", evidence_type="deterministic", metadata={"domain_age_years": data.get("domain_age_years")}))
+        is_young = isinstance(age_days, (int, float)) and age_days < 30
+        is_established = isinstance(age_days, (int, float)) and age_days >= 730
+        age_sev = "medium" if is_young else ("low" if is_established else "info")
+        age_cat = "domain_age_young" if is_young else ("domain_age_established" if is_established else "domain_age_telemetry")
+        age_str = 0.80 if is_young else (0.75 if is_established else None)
+        evidence.append(create_evidence_item("A1", 2, "Domain age", age_days, severity=age_sev, source="RDAP", evidence_type="deterministic", evidence_strength=age_str, category=age_cat, metadata={"domain_age_years": data.get("domain_age_years")}))
     
     if data.get("registration_date") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A1", 3, "Domain registration date", data["registration_date"], severity="info", source="RDAP", evidence_type="deterministic"))
+        is_recent_reg = isinstance(age_days, (int, float)) and age_days < 30
+        reg_cat = "domain_registered_recently" if is_recent_reg else "registration_date_telemetry"
+        evidence.append(create_evidence_item("A1", 3, "Domain registration date", data["registration_date"], severity="info", source="RDAP", evidence_type="deterministic", category=reg_cat))
     
     if data.get("expiry_date") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A1", 4, "Domain expiration date", data["expiry_date"], severity="info", source="RDAP", evidence_type="deterministic"))
+        evidence.append(create_evidence_item("A1", 4, "Domain expiration date", data["expiry_date"], severity="info", source="RDAP", evidence_type="deterministic", category="expiry_date_telemetry"))
         
     if data.get("registrar") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A1", 5, "Domain registrar", data["registrar"], severity="info", source="RDAP", evidence_type="deterministic"))
+        evidence.append(create_evidence_item("A1", 5, "Domain registrar", data["registrar"], severity="info", source="RDAP", evidence_type="deterministic", category="registrar_telemetry"))
         
-    evidence.append(create_evidence_item("A1", 6, "WHOIS/RDAP availability", data.get("whois_available", False), severity="info", source="RDAP", evidence_type="deterministic"))
+    evidence.append(create_evidence_item("A1", 6, "WHOIS/RDAP availability", data.get("whois_available", False), severity="info", source="RDAP", evidence_type="deterministic", category="whois_availability_telemetry"))
     
     if data.get("registrant_organization") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A1", 7, "Registrant organization", data["registrant_organization"], severity="info", source="RDAP", evidence_type="deterministic"))
+        org_str = str(data["registrant_organization"]).strip()
+        is_verified_org = bool(org_str and "privacy" not in org_str.lower() and "redacted" not in org_str.lower() and "whoisguard" not in org_str.lower())
+        org_cat = "whois_verified_registrant" if is_verified_org else "registrant_org_telemetry"
+        evidence.append(create_evidence_item("A1", 7, "Registrant organization", data["registrant_organization"], severity="info", source="RDAP", evidence_type="deterministic", category=org_cat))
         
     if data.get("registrant_country") not in ("Not Available", None):
-        evidence.append(create_evidence_item("A1", 8, "Registrant country", data["registrant_country"], severity="info", source="RDAP", evidence_type="deterministic"))
+        evidence.append(create_evidence_item("A1", 8, "Registrant country", data["registrant_country"], severity="info", source="RDAP", evidence_type="deterministic", category="registrant_country_telemetry"))
         
     if data.get("domain_status"):
-        evidence.append(create_evidence_item("A1", 9, "Domain status codes", data["domain_status"], severity="info", source="RDAP", evidence_type="deterministic"))
+        evidence.append(create_evidence_item("A1", 9, "Domain status codes", data["domain_status"], severity="info", source="RDAP", evidence_type="deterministic", category="domain_status_telemetry"))
 
     # ------------------------------------------------------------------
     # Step 7: Determine overall status and build result

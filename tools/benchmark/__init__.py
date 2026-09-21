@@ -180,6 +180,23 @@ from .dataset_assembler import (
     DatasetAssembler,
 )
 
+from .data_collector import (
+    SourceCategory,
+    SourceRole,
+    CollectionSessionStatus,
+    CollectionStoppingReason,
+    ApprovedSourceConfig,
+    CollectionConfig,
+    CollectionItemAudit,
+    CollectionSourceAudit,
+    CollectionManifest,
+    CollectionResult,
+    validate_source_role_firewall,
+    sanitize_pii_parameters,
+    BenchmarkDataCollector,
+    create_standard_benchmark_collector,
+)
+
 __all__ = [
     # Schemas
     "InputModality",
@@ -320,4 +337,19 @@ __all__ = [
     "DatasetAssemblyGateResult",
     "DatasetAssemblyResult",
     "DatasetAssembler",
+    # Real Benchmark Data Collection & Acquisition
+    "SourceCategory",
+    "SourceRole",
+    "CollectionSessionStatus",
+    "CollectionStoppingReason",
+    "ApprovedSourceConfig",
+    "CollectionConfig",
+    "CollectionItemAudit",
+    "CollectionSourceAudit",
+    "CollectionManifest",
+    "CollectionResult",
+    "validate_source_role_firewall",
+    "sanitize_pii_parameters",
+    "BenchmarkDataCollector",
+    "create_standard_benchmark_collector",
 ]

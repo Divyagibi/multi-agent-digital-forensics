@@ -506,6 +506,20 @@ Evaluates strict quality criteria and emits a definitive status:
 * **`READY_FOR_EXPERIMENT`:** 100% schema-valid records, valid identity prefixes, verified ground truth, 0 critical/error audit findings, zero cross-partition target leakage, zero cross-partition QR/direct leakage, and verified cryptographic snapshot digests.
 * **`BLOCKED_FROM_EXPERIMENT`:** Immediate blocking upon any critical leakage, ground-truth self-labeling, prospective chronology violations, or hash mismatches.
 
+---
+
+## 21. Real Benchmark Data Collection & Acquisition Layer (Step 6D-8)
+
+### 21.1 Architectural Purpose & Guarantees
+The benchmark data acquisition layer (`tools/benchmark/data_collector.py`) orchestrates the controlled, reproducible, and auditable gathering of real-world candidate artifacts across approved source feeds:
+* **Source Role Firewall:** Formally segregates candidate sources, TI exposure feeds, independent ground-truth sources, and internal forensic analysis engines. Prohibits self-labeling and role conflation.
+* **Provenance & Raw Capture:** Preserves exact raw artifact representations (`DIRECT_URL`, `QR_IMAGE`, `QR_PAYLOAD`), harvest timestamps, and source record references.
+* **Passive Liveness Integration:** Leverages Step 6D-3 `PassiveLivenessEvaluator` ($\ge 100$ B body threshold, TLS verification enabled, bounded redirects) without dynamic execution or browser automation.
+* **PII Sanitization:** Masks sensitive query tokens (`password`, `token`, `api_key`, `email`) while preserving URL structure.
+* **Objective Stopping Rules:** Enforces capacity ceiling ($N \approx 1200$ planning target, max ceiling 2500), source exhaustion, temporal cutoffs, and safety limits without post-hoc performance bias.
+* **Step 6D-6 Handoff:** Provides `handoff_to_dataset_assembler()` to transition collection results into the dataset assembly pipeline and achieve `READY_FOR_EXPERIMENT` pre-run gate validation.
+
+
 
 
 

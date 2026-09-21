@@ -1,0 +1,3486 @@
+{
+  "H3_incremental_diagnostic_contributions": [
+    {
+      "cohens_d": 0.47165705181376705,
+      "condition_a": "M0",
+      "condition_b": "M1",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": true,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": 0.0,
+      "wilcoxon_statistic": 2145.0
+    },
+    {
+      "cohens_d": 0.0,
+      "condition_a": "M0",
+      "condition_b": "M2",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": false,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": null,
+      "wilcoxon_statistic": null
+    },
+    {
+      "cohens_d": 0.0671029984265372,
+      "condition_a": "M0",
+      "condition_b": "M3",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": true,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": 9.140179946243165e-09,
+      "wilcoxon_statistic": 732.0
+    },
+    {
+      "cohens_d": 0.5324800543074222,
+      "condition_a": "M0",
+      "condition_b": "M4",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": true,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": 0.0,
+      "wilcoxon_statistic": 66.0
+    },
+    {
+      "cohens_d": 0.4928561369758357,
+      "condition_a": "M0",
+      "condition_b": "M5",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": true,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": 0.0,
+      "wilcoxon_statistic": 1765.0
+    },
+    {
+      "cohens_d": 0.0,
+      "condition_a": "M0",
+      "condition_b": "M6",
+      "incremental_diagnostic_contribution": 0.0,
+      "is_statistically_significant": false,
+      "mcnemar_p_value": 1.0,
+      "mcnemar_statistic": 0.0,
+      "metric_a_name": "balanced_accuracy",
+      "metric_a_value": 0.967741935483871,
+      "metric_b_value": 0.967741935483871,
+      "metric_delta": 0.0,
+      "notes": "",
+      "odds_ratio": 1.0,
+      "wilcoxon_p_value": null,
+      "wilcoxon_statistic": null
+    }
+  ],
+  "ablations": {
+    "M1": {
+      "condition": "M1",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 554,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 19,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 19,
+            "malicious_ground_truth_malicious": 200,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNGROUNDED": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              0.8426587301587302,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.94,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 11,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 1,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 1,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNGROUNDED": 60
+          },
+          "pr_auc": 0.9680934343434343,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 0.985,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            0.9856888643106002,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            0.9968663594470046,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 565,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 20,
+          "high_risk_ground_truth_malicious": 0,
+          "low_risk_ground_truth_benign": 15,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 20,
+          "malicious_ground_truth_malicious": 210,
+          "suspicious_ground_truth_benign": 0,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNGROUNDED": 1220
+        },
+        "pr_auc": 0.9958355704375875,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 0.9990552995391705,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              0.9549967750547083,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9902094717668488,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 213,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 8,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 5,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 85,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNGROUNDED": 466
+          },
+          "pr_auc": 0.9872101261684829,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 0.9970970206264324,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 205,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 7,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNGROUNDED": 437
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 147,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 3,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 10,
+            "malicious_ground_truth_malicious": 50,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNGROUNDED": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNGROUNDED": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              0.8711934894064832,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9963768115942029,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 565,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 20,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 15,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 20,
+            "malicious_ground_truth_malicious": 25,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNGROUNDED": 1035
+          },
+          "pr_auc": 0.9655693540975409,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 0.9990322580645161,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    },
+    "M2": {
+      "condition": "M2",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 554,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 19,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 19,
+            "malicious_ground_truth_malicious": 200,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNGROUNDED": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 11,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 1,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 1,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNGROUNDED": 60
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            0.9987386719729368,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            0.9995852534562212,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 565,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 20,
+          "high_risk_ground_truth_malicious": 0,
+          "low_risk_ground_truth_benign": 15,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 20,
+          "malicious_ground_truth_malicious": 210,
+          "suspicious_ground_truth_benign": 0,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNGROUNDED": 1220
+        },
+        "pr_auc": 0.9996488391823654,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 0.9998847926267281,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              0.996496184167117,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9987616099071207,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 213,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 8,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 5,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 85,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNGROUNDED": 466
+          },
+          "pr_auc": 0.9990011584831273,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 0.9996434937611408,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 205,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 7,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNGROUNDED": 437
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 147,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 3,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 10,
+            "malicious_ground_truth_malicious": 50,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNGROUNDED": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNGROUNDED": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              0.8711934894064832,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9963768115942029,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 565,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 20,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 15,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 20,
+            "malicious_ground_truth_malicious": 25,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNGROUNDED": 1035
+          },
+          "pr_auc": 0.9655693540975409,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 0.9990322580645161,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    },
+    "M3": {
+      "condition": "M3",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 562,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 19,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 19,
+            "malicious_ground_truth_malicious": 200,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNGROUNDED": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 11,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 1,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 1,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNGROUNDED": 60
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            0.9987386719729368,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            0.9995852534562212,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 573,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 20,
+          "high_risk_ground_truth_malicious": 0,
+          "low_risk_ground_truth_benign": 7,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 20,
+          "malicious_ground_truth_malicious": 210,
+          "suspicious_ground_truth_benign": 0,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNGROUNDED": 1220
+        },
+        "pr_auc": 0.9996488391823654,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 0.9998847926267281,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              0.996496184167117,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9987616099071207,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 214,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 8,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 4,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 85,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNGROUNDED": 466
+          },
+          "pr_auc": 0.9990011584831273,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 0.9996434937611408,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 210,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 7,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 2,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNGROUNDED": 437
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 149,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 1,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 10,
+            "malicious_ground_truth_malicious": 50,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNGROUNDED": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNGROUNDED": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              0.8711934894064832,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9963768115942029,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 573,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 20,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 20,
+            "malicious_ground_truth_malicious": 25,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNGROUNDED": 1035
+          },
+          "pr_auc": 0.9655693540975409,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 0.9990322580645161,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    },
+    "M4": {
+      "condition": "M4",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 554,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 38,
+            "high_risk_ground_truth_malicious": 25,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 175,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNGROUNDED": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 11,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 2,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNGROUNDED": 60
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            0.9968774743140355,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            0.9990046627720908,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 565,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 40,
+          "high_risk_ground_truth_malicious": 25,
+          "low_risk_ground_truth_benign": 15,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 0,
+          "malicious_ground_truth_malicious": 185,
+          "suspicious_ground_truth_benign": 0,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNGROUNDED": 1220
+        },
+        "pr_auc": 0.9988049696502994,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 0.9996159754224271,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              0.9946574145336564,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9981742738589212,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 213,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 13,
+            "high_risk_ground_truth_malicious": 10,
+            "low_risk_ground_truth_benign": 5,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNGROUNDED": 466
+          },
+          "pr_auc": 0.9985456809878331,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 0.9994907053730583,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              0.991603678125815,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9973894883397146,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 205,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 12,
+            "high_risk_ground_truth_malicious": 11,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 64,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNGROUNDED": 437
+          },
+          "pr_auc": 0.9979153151130215,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 0.9993452380952381,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 147,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 15,
+            "high_risk_ground_truth_malicious": 4,
+            "low_risk_ground_truth_benign": 3,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 46,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNGROUNDED": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNGROUNDED": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              0.5970865506032355,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.99185667752443,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 565,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 40,
+            "high_risk_ground_truth_malicious": 25,
+            "low_risk_ground_truth_benign": 15,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNGROUNDED": 1035
+          },
+          "pr_auc": 0.790164941221315,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 0.9967741935483871,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    },
+    "M5": {
+      "condition": "M5",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 554,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 19,
+            "high_risk_ground_truth_malicious": 25,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 175,
+            "suspicious_ground_truth_benign": 19,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNGROUNDED": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 18,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 1,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 1,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNGROUNDED": 60
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            1.0,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            1.0,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 572,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 20,
+          "high_risk_ground_truth_malicious": 25,
+          "low_risk_ground_truth_benign": 8,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 0,
+          "malicious_ground_truth_malicious": 185,
+          "suspicious_ground_truth_benign": 20,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNGROUNDED": 1220
+        },
+        "pr_auc": 1.0,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 1.0,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 217,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 10,
+            "low_risk_ground_truth_benign": 1,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 8,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNGROUNDED": 466
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 207,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 11,
+            "low_risk_ground_truth_benign": 5,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 64,
+            "suspicious_ground_truth_benign": 7,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNGROUNDED": 437
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 148,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 10,
+            "high_risk_ground_truth_malicious": 4,
+            "low_risk_ground_truth_benign": 2,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 46,
+            "suspicious_ground_truth_benign": 5,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNGROUNDED": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNGROUNDED": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 572,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 20,
+            "high_risk_ground_truth_malicious": 25,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 20,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNGROUNDED": 1035
+          },
+          "pr_auc": 1.0,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    },
+    "M6": {
+      "condition": "M6",
+      "modality_metrics": {
+        "DIRECT_URL": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9683333333333333,
+          "conditional_balanced_accuracy": 0.9683333333333333,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9580536912751678,
+              0.9778534923339012
+            ],
+            "f1": [
+              0.8829268292682927,
+              0.9399585921325052
+            ],
+            "f2": [
+              0.9496327387198321,
+              0.9750859106529209
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.7903930131004366,
+              0.88671875
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 554,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 19,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 8,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 19,
+            "malicious_ground_truth_malicious": 200,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 800,
+          "excluded_ambiguous_count": 300,
+          "f1": 0.91324200913242,
+          "f2": 0.9633911368015413,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 38,
+          "fpr": 0.06333333333333334,
+          "grounding_summary": {
+            "UNCERTAIN": 1100
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8403361344537815,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 562,
+          "total_evaluated": 1100,
+          "tp": 200
+        },
+        "QR_IMAGE": {
+          "abstention_rate": null,
+          "balanced_accuracy": null,
+          "conditional_balanced_accuracy": null,
+          "confidence_intervals": {},
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 0,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 0,
+          "excluded_ambiguous_count": 60,
+          "f1": null,
+          "f2": null,
+          "fn": 0,
+          "fnr": null,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {},
+          "pr_auc": null,
+          "precision": null,
+          "recall": null,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 60,
+          "tp": 0
+        },
+        "QR_PAYLOAD": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.95,
+          "conditional_balanced_accuracy": 0.95,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.875,
+              1.0
+            ],
+            "f1": [
+              0.7368421052631579,
+              1.0
+            ],
+            "f2": [
+              0.875,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.5833333333333334,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 11,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 1,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 1,
+            "malicious_ground_truth_malicious": 10,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 30,
+          "excluded_ambiguous_count": 30,
+          "f1": 0.9090909090909091,
+          "f2": 0.9615384615384615,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 2,
+          "fpr": 0.1,
+          "grounding_summary": {
+            "UNCERTAIN": 60
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8333333333333334,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 18,
+          "total_evaluated": 60,
+          "tp": 10
+        }
+      },
+      "overall_metrics": {
+        "abstention_rate": 0.0,
+        "balanced_accuracy": 0.967741935483871,
+        "conditional_balanced_accuracy": 0.967741935483871,
+        "confidence_intervals": {
+          "balanced_accuracy": [
+            0.9571890145395799,
+            0.9784345047923323
+          ],
+          "f1": [
+            0.8849557522123894,
+            0.9404517453798769
+          ],
+          "f2": [
+            0.9505703422053232,
+            0.9752981260647359
+          ],
+          "pr_auc": [
+            0.9987386719729368,
+            1.0
+          ],
+          "precision": [
+            0.7936507936507936,
+            0.8875968992248062
+          ],
+          "recall": [
+            1.0,
+            1.0
+          ],
+          "roc_auc": [
+            0.9995852534562212,
+            1.0
+          ]
+        },
+        "contingency_table": {
+          "benign_ground_truth_benign": 565,
+          "benign_ground_truth_malicious": 0,
+          "high_risk_ground_truth_benign": 20,
+          "high_risk_ground_truth_malicious": 0,
+          "low_risk_ground_truth_benign": 15,
+          "low_risk_ground_truth_malicious": 0,
+          "malicious_ground_truth_benign": 20,
+          "malicious_ground_truth_malicious": 210,
+          "suspicious_ground_truth_benign": 0,
+          "suspicious_ground_truth_malicious": 0
+        },
+        "eligible_count": 830,
+        "excluded_ambiguous_count": 390,
+        "f1": 0.9130434782608696,
+        "f2": 0.9633027522935782,
+        "fn": 0,
+        "fnr": 0.0,
+        "fp": 40,
+        "fpr": 0.06451612903225806,
+        "grounding_summary": {
+          "UNCERTAIN": 1220
+        },
+        "pr_auc": 0.9996488391823654,
+        "precision": 0.84,
+        "recall": 1.0,
+        "roc_auc": 0.9998847926267281,
+        "tn": 580,
+        "total_evaluated": 1220,
+        "tp": 210
+      },
+      "partition_metrics": {
+        "development_calibration": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9718614718614719,
+          "conditional_balanced_accuracy": 0.9718614718614719,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9559471365638766,
+              0.9866071428571428
+            ],
+            "f1": [
+              0.8839779005524863,
+              0.967391304347826
+            ],
+            "f2": [
+              0.9501187648456056,
+              0.9866962305986696
+            ],
+            "pr_auc": [
+              0.996496184167117,
+              1.0
+            ],
+            "precision": [
+              0.7920792079207921,
+              0.9368421052631579
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9987616099071207,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 213,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 8,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 5,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 85,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 316,
+          "excluded_ambiguous_count": 150,
+          "f1": 0.9289617486338798,
+          "f2": 0.9703196347031964,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 13,
+          "fpr": 0.05627705627705628,
+          "grounding_summary": {
+            "UNCERTAIN": 466
+          },
+          "pr_auc": 0.9990011584831273,
+          "precision": 0.8673469387755102,
+          "recall": 1.0,
+          "roc_auc": 0.9996434937611408,
+          "tn": 218,
+          "total_evaluated": 466,
+          "tp": 85
+        },
+        "final_test": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9732142857142857,
+          "conditional_balanced_accuracy": 0.9732142857142857,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9570135746606334,
+              0.9864253393665159
+            ],
+            "f1": [
+              0.8815789473684211,
+              0.9642857142857143
+            ],
+            "f2": [
+              0.9490084985835695,
+              0.9854014598540146
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.788235294117647,
+              0.9310344827586207
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 205,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 7,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 7,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 5,
+            "malicious_ground_truth_malicious": 75,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 299,
+          "excluded_ambiguous_count": 138,
+          "f1": 0.9259259259259259,
+          "f2": 0.9689922480620154,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 12,
+          "fpr": 0.05357142857142857,
+          "grounding_summary": {
+            "UNCERTAIN": 437
+          },
+          "pr_auc": 1.0,
+          "precision": 0.8620689655172413,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 212,
+          "total_evaluated": 437,
+          "tp": 75
+        },
+        "validation": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.9545454545454546,
+          "conditional_balanced_accuracy": 0.9545454545454546,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9303030303030303,
+              0.975609756097561
+            ],
+            "f1": [
+              0.7962962962962964,
+              0.9306930693069307
+            ],
+            "f2": [
+              0.9071729957805906,
+              0.9710743801652895
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              0.6615384615384615,
+              0.8703703703703703
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              1.0,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 147,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 5,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 3,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 10,
+            "malicious_ground_truth_malicious": 50,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 215,
+          "excluded_ambiguous_count": 102,
+          "f1": 0.8695652173913044,
+          "f2": 0.9433962264150945,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 15,
+          "fpr": 0.09090909090909091,
+          "grounding_summary": {
+            "UNCERTAIN": 317
+          },
+          "pr_auc": 1.0,
+          "precision": 0.7692307692307693,
+          "recall": 1.0,
+          "roc_auc": 1.0,
+          "tn": 150,
+          "total_evaluated": 317,
+          "tp": 50
+        }
+      },
+      "ti_exposure_metrics": {
+        "DIRECT": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 1.0,
+          "conditional_balanced_accuracy": 1.0,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              1.0,
+              1.0
+            ],
+            "f1": [
+              1.0,
+              1.0
+            ],
+            "f2": [
+              1.0,
+              1.0
+            ],
+            "pr_auc": [
+              1.0,
+              1.0
+            ],
+            "precision": [
+              1.0,
+              1.0
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              null,
+              null
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 0,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 0,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 0,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 0,
+            "malicious_ground_truth_malicious": 185,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 185,
+          "excluded_ambiguous_count": 0,
+          "f1": 1.0,
+          "f2": 1.0,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 0,
+          "fpr": null,
+          "grounding_summary": {
+            "UNCERTAIN": 185
+          },
+          "pr_auc": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "roc_auc": null,
+          "tn": 0,
+          "total_evaluated": 185,
+          "tp": 185
+        },
+        "NONE": {
+          "abstention_rate": 0.0,
+          "balanced_accuracy": 0.967741935483871,
+          "conditional_balanced_accuracy": 0.967741935483871,
+          "confidence_intervals": {
+            "balanced_accuracy": [
+              0.9578606158833063,
+              0.9767628205128205
+            ],
+            "f1": [
+              0.41379310344827586,
+              0.6725663716814159
+            ],
+            "f2": [
+              0.6382978723404255,
+              0.8370044052863437
+            ],
+            "pr_auc": [
+              0.8711934894064832,
+              1.0
+            ],
+            "precision": [
+              0.2608695652173913,
+              0.5066666666666667
+            ],
+            "recall": [
+              1.0,
+              1.0
+            ],
+            "roc_auc": [
+              0.9963768115942029,
+              1.0
+            ]
+          },
+          "contingency_table": {
+            "benign_ground_truth_benign": 565,
+            "benign_ground_truth_malicious": 0,
+            "high_risk_ground_truth_benign": 20,
+            "high_risk_ground_truth_malicious": 0,
+            "low_risk_ground_truth_benign": 15,
+            "low_risk_ground_truth_malicious": 0,
+            "malicious_ground_truth_benign": 20,
+            "malicious_ground_truth_malicious": 25,
+            "suspicious_ground_truth_benign": 0,
+            "suspicious_ground_truth_malicious": 0
+          },
+          "eligible_count": 645,
+          "excluded_ambiguous_count": 390,
+          "f1": 0.5555555555555556,
+          "f2": 0.7575757575757577,
+          "fn": 0,
+          "fnr": 0.0,
+          "fp": 40,
+          "fpr": 0.06451612903225806,
+          "grounding_summary": {
+            "UNCERTAIN": 1035
+          },
+          "pr_auc": 0.9655693540975409,
+          "precision": 0.38461538461538464,
+          "recall": 1.0,
+          "roc_auc": 0.9990322580645161,
+          "tn": 580,
+          "total_evaluated": 1035,
+          "tp": 25
+        }
+      }
+    }
+  }
+}

@@ -25,6 +25,10 @@ from agents.agent16_network import (
     fingerprint_server_technologies,
     compile_network_evidence
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
 from app import app
 
 
@@ -328,6 +332,123 @@ class TestAgent16NetworkSecurity(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn("error", data)
 
+    # 16. Comprehensive SSRF & IPv6 / Cloud Metadata Restriction
+    def test_27_ssrf_comprehensive_protection(self):
+        # IPv4 private/loopback/link-local/metadata
+        self.assertTrue(_is_private_or_restricted_ip("127.0.0.1"))
+        self.assertTrue(_is_private_or_restricted_ip("10.254.0.1"))
+        self.assertTrue(_is_private_or_restricted_ip("172.16.5.5"))
+        self.assertTrue(_is_private_or_restricted_ip("192.168.100.1"))
+        self.assertTrue(_is_private_or_restricted_ip("169.254.169.254"))
+        self.assertTrue(_is_private_or_restricted_ip("0.0.0.0"))
+        # IPv6 loopback, link-local, unique local
+        self.assertTrue(_is_private_or_restricted_ip("::1"))
+        self.assertTrue(_is_private_or_restricted_ip("fe80::1"))
+        self.assertTrue(_is_private_or_restricted_ip("fc00::1"))
+        # Public IPs should NOT be restricted
+        self.assertFalse(_is_private_or_restricted_ip("93.184.216.34"))
+        self.assertFalse(_is_private_or_restricted_ip("1.1.1.1"))
+        self.assertFalse(_is_private_or_restricted_ip("2606:4700::6810:7c60"))
+
+    # 17. Common Evidence Schema & Evidence Ledger Ingestion
+    @patch("agents.agent16_network._resolve_target_ip")
+    @patch("agents.agent16_network.check_open_ports")
+    @patch("agents.agent16_network.fetch_http_headers")
+    def test_28_evidence_schema_and_ledger_ingestion(self, mock_fetch, mock_ports, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        mock_ports.return_value = {
+            "80": {"port": 80, "state": "open", "protocol": "tcp", "service_guess": "HTTP"},
+            "443": {"port": 443, "state": "open", "protocol": "tcp", "service_guess": "HTTPS"}
+        }
+        mock_fetch.return_value = ({
+            "status_code": 200,
+            "final_url": "https://example.com/",
+            "headers": {
+                "Server": "nginx/1.24.0",
+                "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+                "Content-Security-Policy": "default-src 'self'",
+                "X-Frame-Options": "DENY",
+                "X-Content-Type-Options": "nosniff"
+            },
+            "redirect_count": 0,
+            "redirect_chain": ["https://example.com/"],
+            "https_reachable": True,
+            "http_reachable": True,
+            "http_to_https_redirect": True
+        }, [])
+
+        result = analyze_network_security("https://example.com")
+        is_valid, errs = validate_agent_result(result)
+        self.assertTrue(is_valid, f"Validation errors: {errs}")
+        self.assertEqual(len(result["evidence"]), 8)
+
+        ledger = EvidenceLedger()
+        for ev in result["evidence"]:
+            is_ev_valid, ev_errs = validate_evidence_item(ev)
+            self.assertTrue(is_ev_valid, f"Item errors: {ev_errs}")
+            self.assertTrue(ev["evidence_id"].startswith("E16-"))
+            self.assertIn("category", ev)
+            norm_item = normalize_evidence_item(ev, agent_identifier="A16")
+            ledger.add_entry(norm_item)
+
+        items = ledger.get_entries()
+        self.assertEqual(len(items), 8)
+
+    # 18. Absence of Forbidden Autonomous Scoring / Verdicts
+    @patch("agents.agent16_network._resolve_target_ip")
+    @patch("agents.agent16_network.check_open_ports")
+    @patch("agents.agent16_network.fetch_http_headers")
+    def test_29_no_autonomous_scoring_or_verdict(self, mock_fetch, mock_ports, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        mock_ports.return_value = {"80": {"port": 80, "state": "open", "protocol": "tcp"}}
+        mock_fetch.return_value = ({"status_code": 200, "headers": {}}, [])
+
+        result = analyze_network_security("https://example.com")
+        self.assertIsNone(result.get("trust_score"))
+        self.assertIsNone(result.get("risk_score"))
+        self.assertNotIn("verdict", result.get("data", {}))
+
+    # 19. Declarative TCE Polarity Resolution for A16 Categories
+    @patch("agents.agent16_network._resolve_target_ip")
+    @patch("agents.agent16_network.check_open_ports")
+    @patch("agents.agent16_network.fetch_http_headers")
+    def test_30_tce_polarity_resolution(self, mock_fetch, mock_ports, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        mock_ports.return_value = {"80": {"port": 80, "state": "open", "protocol": "tcp"}}
+        mock_fetch.return_value = ({
+            "status_code": 200,
+            "headers": {
+                "Strict-Transport-Security": "max-age=31536000",
+                "Content-Security-Policy": "default-src 'self'",
+                "X-Frame-Options": "DENY"
+            },
+            "http_to_https_redirect": True
+        }, [])
+
+        result = analyze_network_security("https://example.com")
+        for ev in result["evidence"]:
+            cat = ev.get("category", "")
+            polarity = resolve_evidence_polarity(cat, ev.get("finding", ""))
+            self.assertIn(polarity, ("risk_reducing", "risk_increasing", "neutral"))
+
+    # 21. DEF-09: Missing Security Headers Low Severity Calibration
+    @patch("agents.agent16_network._resolve_target_ip")
+    @patch("agents.agent16_network.check_open_ports")
+    @patch("agents.agent16_network.fetch_http_headers")
+    def test_32_regression_def09_missing_headers_low_severity(self, mock_fetch, mock_ports, mock_resolve):
+        """DEF-09: Verify that missing CSP, X-Frame-Options, and HSTS headers are emitted as low severity hygiene, not medium/high risk."""
+        mock_resolve.return_value = ("93.184.216.34", None)
+        mock_ports.return_value = {"80": {"port": 80, "state": "open", "protocol": "tcp"}}
+        # Response with missing CSP, XFO, HSTS
+        mock_fetch.return_value = ({"status_code": 200, "headers": {}}, [])
+
+        result = analyze_network_security("https://example.com")
+        for ev in result["evidence"]:
+            if ev.get("evidence_id") in ("E16-04", "E16-05"):
+                self.assertEqual(ev.get("severity"), "low", f"{ev.get('evidence_id')} must be low severity, got {ev.get('severity')}")
+                self.assertLessEqual(ev.get("evidence_strength", 1.0), 0.2)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -841,7 +841,8 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
             source="DNS resolution validation",
             evidence_type="deterministic",
             evidence_strength=0.9,
-            metadata={"hostname": norm["hostname"], "resolved_ip": resolved_ip}
+            metadata={"hostname": norm["hostname"], "resolved_ip": resolved_ip},
+            category="open_sensitive_port"
         )]
         return build_agent_result(
             agent_identifier="A16",
@@ -895,7 +896,8 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
         source="TCP Socket Inspection",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata={"ports": open_ports}
+        metadata={"ports": open_ports},
+        category="standard_port_open"
     ))
 
     # E16-02: HTTP Headers & Reachability
@@ -905,11 +907,12 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
         index=2,
         finding="HTTP protocol reachability and HTTPS redirection",
         value=f"Status: {http_data.get('status_code')}, HTTPS redirect: {has_redirect}",
-        severity="info" if has_redirect else "low",
+        severity="info",
         source="HTTP Head Inspection",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata=http_data
+        metadata=http_data,
+        category="hsts_preloaded" if has_redirect else "clean_http_route"
     ))
 
     # E16-03: HSTS Header
@@ -918,13 +921,14 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A16",
         index=3,
-        finding="Strict-Transport-Security (HSTS) enforcement",
+        finding="Strict-Transport-Security (HSTS) header configured" if hsts_present else "Strict-Transport-Security (HSTS) header absent",
         value=hsts.get("value") if hsts_present else "Missing",
         severity="info" if hsts_present else "low",
         source="HTTP Response Headers",
         evidence_type="deterministic",
-        evidence_strength=0.1,
-        metadata=hsts
+        evidence_strength=0.1 if hsts_present else 0.2,
+        metadata=hsts,
+        category="hsts_preloaded" if hsts_present else "missing_security_headers"
     ))
 
     # E16-04: CSP Header
@@ -933,13 +937,14 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A16",
         index=4,
-        finding="Content Security Policy (CSP) presence and directive coverage",
+        finding="Content Security Policy (CSP) header configured" if csp_present else "Content Security Policy (CSP) header absent",
         value=csp.get("value") if csp_present else "Missing",
-        severity="info" if csp_present else "medium",
+        severity="info" if csp_present else "low",
         source="HTTP Response Headers",
         evidence_type="deterministic",
-        evidence_strength=0.5 if not csp_present else 0.1,
-        metadata=csp
+        evidence_strength=0.1 if csp_present else 0.2,
+        metadata=csp,
+        category="strict_csp_configured" if csp_present else "missing_security_headers"
     ))
 
     # E16-05: X-Frame-Options
@@ -948,13 +953,14 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A16",
         index=5,
-        finding="X-Frame-Options clickjacking framing protection",
+        finding="X-Frame-Options framing protection configured" if xfo_present else "X-Frame-Options framing protection header absent",
         value=xfo.get("value") if xfo_present else "Missing",
-        severity="info" if xfo_present else "medium",
+        severity="info" if xfo_present else "low",
         source="HTTP Response Headers",
         evidence_type="deterministic",
-        evidence_strength=0.5 if not xfo_present else 0.1,
-        metadata=xfo
+        evidence_strength=0.1 if xfo_present else 0.2,
+        metadata=xfo,
+        category="strict_csp_configured" if xfo_present else "missing_security_headers"
     ))
 
     # E16-06: MIME Sniffing Protection
@@ -965,11 +971,12 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
         index=6,
         finding="X-Content-Type-Options nosniff directive",
         value=xcto.get("value") if xcto_present else "Missing",
-        severity="info" if xcto_present else "low",
+        severity="info",
         source="HTTP Response Headers",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata=xcto
+        metadata=xcto,
+        category="meta_description_present" if xcto_present else "missing_security_headers"
     ))
 
     # E16-07: CORS Configuration
@@ -983,7 +990,8 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
         source="CORS Inspection",
         evidence_type="deterministic",
         evidence_strength=0.8 if cors_risk == "high" else 0.1,
-        metadata=cors_data
+        metadata=cors_data,
+        category="missing_security_headers" if (cors_risk == "high" or cors_data.get("potential_cors_misconfiguration")) else ("strict_cors_configured" if cors_data.get("present") else "meta_description_present")
     ))
 
     # E16-08: Server Fingerprinting
@@ -996,7 +1004,8 @@ def analyze_network_security(url: str) -> Dict[str, Any]:
         source="Server Banner Headers",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata=server_data
+        metadata=server_data,
+        category="server_banner_detected"
     ))
 
     data_payload = {

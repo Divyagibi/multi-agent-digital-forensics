@@ -13,6 +13,7 @@ DO NOT fabricate unavailable information.
 
 import datetime
 import html
+import ipaddress
 import json
 import os
 import re
@@ -47,6 +48,50 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 # Standardized Complaint Categories
 STANDARD_COMPLAINT_CATEGORIES = [
@@ -961,29 +1006,32 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     
     # 2. Fetch target website HTML to extract company name, title, and customer testimonials
     html_content = ""
-    try:
-        resp = requests.get(
-            norm_url,
-            headers=DEFAULT_HEADERS,
-            timeout=REQUEST_TIMEOUT,
-            verify=False
-        )
-        if resp.status_code == 200:
-            html_content = resp.text
-            soup = BeautifulSoup(html_content[:MAX_HTML_SIZE], "html.parser")
-            if soup.title and soup.title.string:
-                title_clean = soup.title.string.strip()
-                # If title contains brand like "Brand: Subtitle", extract brand
-                if " - " in title_clean:
-                    candidate = title_clean.split(" - ")[0].strip()
-                    if candidate and len(candidate) < 40:
-                        company_name = candidate
-                elif " | " in title_clean:
-                    candidate = title_clean.split(" | ")[0].strip()
-                    if candidate and len(candidate) < 40:
-                        company_name = candidate
-    except Exception as e:
-        errors.append({"source": "Target Website", "error": f"Could not fetch target page HTML: {str(e)}"})
+    if not _is_safe_url(norm_url):
+        errors.append({"source": "Target Website", "error": "Target URL blocked by security policy (SSRF protection)"})
+    else:
+        try:
+            resp = requests.get(
+                norm_url,
+                headers=DEFAULT_HEADERS,
+                timeout=REQUEST_TIMEOUT,
+                verify=False
+            )
+            if resp.status_code == 200:
+                html_content = resp.text
+                soup = BeautifulSoup(html_content[:MAX_HTML_SIZE], "html.parser")
+                if soup.title and soup.title.string:
+                    title_clean = soup.title.string.strip()
+                    # If title contains brand like "Brand: Subtitle", extract brand
+                    if " - " in title_clean:
+                        candidate = title_clean.split(" - ")[0].strip()
+                        if candidate and len(candidate) < 40:
+                            company_name = candidate
+                    elif " | " in title_clean:
+                        candidate = title_clean.split(" | ")[0].strip()
+                        if candidate and len(candidate) < 40:
+                            company_name = candidate
+        except Exception as e:
+            errors.append({"source": "Target Website", "error": f"Could not fetch target page HTML: {str(e)}"})
         
     # 3. Collect Customer Testimonials on Official Website
     customer_testimonials = extract_website_testimonials(html_content, norm_url)
@@ -1182,6 +1230,7 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=1,
+        category="threat_intel_blocklist" if tp_bad else ("positive_consumer_reputation" if (tp_avail and tp_rating is not None and tp_rating >= 3.5) else "meta_description_present"),
         finding="Trustpilot merchant rating profile",
         value=f"{tp_rating}/5 ({trustpilot_data.get('review_count', 0)} reviews)" if tp_avail else "Not Available",
         severity="high" if tp_bad else "info",
@@ -1197,6 +1246,7 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=2,
+        category="threat_intel_blocklist" if gr_bad else ("positive_consumer_reputation" if (gr_avail and gr_rating is not None and gr_rating >= 3.5) else "meta_description_present"),
         finding="Google Business rating and customer reviews",
         value=f"{gr_rating}/5 ({google_data.get('review_count', 0)} reviews)" if gr_avail else "Not Available",
         severity="high" if gr_bad else "info",
@@ -1212,12 +1262,13 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=3,
+        category="public_complaints_found" if rd_bad else "public_discussions_found",
         finding="Reddit user discussions and community threads",
         value=len(rd_discs),
-        severity="medium" if rd_bad else "info",
+        severity="low" if rd_bad else "info",
         source="Reddit Search",
         evidence_type="external_source",
-        evidence_strength=0.6 if rd_bad else 0.1,
+        evidence_strength=0.3 if rd_bad else 0.1,
         metadata=reddit_data
     ))
 
@@ -1225,12 +1276,13 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=4,
+        category="public_complaints_found" if neg_count > pos_count else ("positive_consumer_reputation" if (pos_count > neg_count and pos_count >= 3) else "clean_static_scripts"),
         finding="Public review aggregation and sentiment distribution",
         value=review_summary,
-        severity="high" if neg_count > pos_count else "info",
+        severity="low" if neg_count > pos_count else "info",
         source="Aggregated Consumer Reviews",
         evidence_type="external_source",
-        evidence_strength=0.75 if neg_count > pos_count else 0.1,
+        evidence_strength=0.4 if neg_count > pos_count else 0.1,
         metadata={"summary": review_summary, "anomalies": review_anomalies}
     ))
 
@@ -1239,11 +1291,12 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=5,
+        category="threat_intel_blocklist" if has_scam_c else "meta_description_present",
         finding="Public scam and consumer fraud complaint records",
         value=len(scam_complaints),
         severity="critical" if has_scam_c else "info",
         source="Consumer Protection / Complaint Sites",
-        evidence_type="threat_intelligence",
+        evidence_type="external_source",
         evidence_strength=0.9 if has_scam_c else 0.05,
         metadata={"complaints": scam_complaints}
     ))
@@ -1252,6 +1305,7 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=6,
+        category="meta_description_present",
         finding="Official website customer testimonials and verification",
         value=len(customer_testimonials),
         severity="info",
@@ -1266,6 +1320,7 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=7,
+        category="scam_fraud_keywords" if has_forums else "meta_description_present",
         finding="Consumer forum grievance and dispute reports",
         value=len(complaint_forums),
         severity="high" if has_forums else "info",
@@ -1280,6 +1335,7 @@ def analyze_user_trust(url: str) -> Dict[str, Any]:
     structured_evidence.append(create_evidence_item(
         agent_id="A15",
         index=8,
+        category="threat_intel_blocklist" if has_cross else "meta_description_present",
         finding="Cross-source corroborated complaint patterns",
         value=[p.get("pattern") for p in cross_source_patterns],
         severity="critical" if has_cross else "info",

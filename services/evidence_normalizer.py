@@ -268,6 +268,8 @@ def normalize_evidence_item(
         raw_status = agent_result.get("status", "success")
         if raw_status in VALID_STATUSES:
             agent_status = raw_status
+    elif "status" in evidence_item and str(evidence_item["status"]).strip().lower() in VALID_STATUSES:
+        agent_status = str(evidence_item["status"]).strip().lower()
 
     source_detail = str(evidence_item.get("source", "Unknown")).strip()
     provenance = {

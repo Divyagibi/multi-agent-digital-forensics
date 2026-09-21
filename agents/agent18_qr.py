@@ -24,7 +24,10 @@ IMPORTANT:
 import os
 import re
 import io
+import json
 import base64
+import socket
+import ipaddress
 import urllib.parse
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple, Union
@@ -55,6 +58,10 @@ except ImportError:
 MAX_REDIRECTS = 10
 REDIRECT_TIMEOUT_SECONDS = 5
 MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_IMAGE_DIMENSION = 4096
+
+# Pillow decompression bomb protection limit
+Image.MAX_IMAGE_PIXELS = 10_000_000
 
 COMMON_SHORTENER_DOMAINS = {
     "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
@@ -74,6 +81,108 @@ URL_REGEX = re.compile(
     r"(?:https?://|ftp://|www\.)[a-zA-Z0-9\-\._~:/\?#\[\]@!\$&'\(\)\*\+,;=%]+",
     re.IGNORECASE
 )
+
+
+# =====================================================================
+# SSRF & SAFE NETWORK UTILITIES
+# =====================================================================
+
+def _is_private_or_restricted_ip(ip_str: str) -> bool:
+    """
+    Verify if an IP address belongs to private, loopback, link-local,
+    multicast, or reserved address spaces (SSRF protection).
+    """
+    try:
+        ip_obj = ipaddress.ip_address(ip_str)
+        return (
+            ip_obj.is_private or
+            ip_obj.is_loopback or
+            ip_obj.is_link_local or
+            ip_obj.is_multicast or
+            ip_obj.is_reserved or
+            ip_obj.is_unspecified
+        )
+    except Exception:
+        return False
+
+
+def _resolve_target_ip(hostname: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Safely resolve hostname to IPv4 address and validate against restricted ranges.
+    """
+    if not hostname:
+        return None, "Invalid or empty hostname."
+
+    # Check if hostname itself is an IP literal
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+        ip_str = str(ip_obj)
+        if _is_private_or_restricted_ip(ip_str):
+            return ip_str, "target_restricted"
+        return ip_str, None
+    except ValueError:
+        pass
+
+    try:
+        resolved_ip = socket.gethostbyname(hostname)
+        if _is_private_or_restricted_ip(resolved_ip):
+            return resolved_ip, "target_restricted"
+        return resolved_ip, None
+    except socket.gaierror as e:
+        return None, f"DNS resolution failure: {str(e)}"
+    except Exception as e:
+        return None, f"Resolution error: {str(e)}"
+
+
+def _load_safe_image(image_input: Union[str, bytes, io.BytesIO]) -> Tuple[Optional[Image.Image], Optional[str]]:
+    """
+    Safely load and validate image with decompression bomb, size, and dimension limits.
+    """
+    try:
+        pil_image = None
+        if isinstance(image_input, str):
+            if image_input.startswith("data:image/") and ";base64," in image_input:
+                b64_data = image_input.split(";base64,")[1]
+                raw_bytes = base64.b64decode(b64_data)
+                if len(raw_bytes) > MAX_IMAGE_SIZE_BYTES:
+                    return None, f"Image exceeds maximum size of {MAX_IMAGE_SIZE_BYTES} bytes."
+                pil_image = Image.open(io.BytesIO(raw_bytes))
+            elif os.path.exists(image_input):
+                if os.path.getsize(image_input) > MAX_IMAGE_SIZE_BYTES:
+                    return None, f"Image file exceeds maximum size of {MAX_IMAGE_SIZE_BYTES} bytes."
+                pil_image = Image.open(image_input)
+            else:
+                try:
+                    raw_bytes = base64.b64decode(image_input)
+                    if len(raw_bytes) > MAX_IMAGE_SIZE_BYTES:
+                        return None, f"Image exceeds maximum size of {MAX_IMAGE_SIZE_BYTES} bytes."
+                    pil_image = Image.open(io.BytesIO(raw_bytes))
+                except Exception:
+                    return None, f"Image file not found or invalid base64: {image_input}"
+        elif isinstance(image_input, (bytes, bytearray)):
+            if len(image_input) > MAX_IMAGE_SIZE_BYTES:
+                return None, f"Image exceeds maximum size of {MAX_IMAGE_SIZE_BYTES} bytes."
+            pil_image = Image.open(io.BytesIO(image_input))
+        elif isinstance(image_input, io.BytesIO):
+            val = image_input.getvalue()
+            if len(val) > MAX_IMAGE_SIZE_BYTES:
+                return None, f"Image exceeds maximum size of {MAX_IMAGE_SIZE_BYTES} bytes."
+            pil_image = Image.open(image_input)
+
+        if not pil_image:
+            return None, "Unable to parse image data."
+
+        # Bound maximum dimensions
+        w, h = pil_image.size
+        if w > MAX_IMAGE_DIMENSION or h > MAX_IMAGE_DIMENSION:
+            pil_image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS)
+
+        return pil_image, None
+
+    except Image.DecompressionBombError:
+        return None, "Image exceeds decompression bomb safety limit."
+    except Exception as e:
+        return None, f"Image parsing error: {str(e)}"
 
 
 # =====================================================================
@@ -101,28 +210,9 @@ def decode_qr_image(image_input: Union[str, bytes, io.BytesIO]) -> Dict[str, Any
         return result
 
     try:
-        # Load image into PIL / OpenCV format
-        pil_image = None
-        if isinstance(image_input, str):
-            if image_input.startswith("data:image/") and ";base64," in image_input:
-                b64_data = image_input.split(";base64,")[1]
-                pil_image = Image.open(io.BytesIO(base64.b64decode(b64_data)))
-            elif os.path.exists(image_input):
-                pil_image = Image.open(image_input)
-            else:
-                # Try raw base64 decode
-                try:
-                    pil_image = Image.open(io.BytesIO(base64.b64decode(image_input)))
-                except Exception:
-                    result["error"] = f"Image file not found: {image_input}"
-                    return result
-        elif isinstance(image_input, (bytes, bytearray)):
-            pil_image = Image.open(io.BytesIO(image_input))
-        elif isinstance(image_input, io.BytesIO):
-            pil_image = Image.open(image_input)
-
-        if not pil_image:
-            result["error"] = "Unable to parse image data."
+        pil_image, load_err = _load_safe_image(image_input)
+        if load_err or not pil_image:
+            result["error"] = load_err or "Unable to parse image data."
             return result
 
         # Convert to RGB numpy array
@@ -167,20 +257,34 @@ def decode_qr_image(image_input: Union[str, bytes, io.BytesIO]) -> Dict[str, Any
         result["decoded_data"] = decoded_text
         result["points"] = points
 
-        # Determine data type
+        # Forensic classification of payload data type
+        lower_dec = decoded_text.lower()
         extracted_url, is_url = extract_embedded_url(decoded_text)
+
         if is_url:
             result["data_type"] = "URL"
-        elif decoded_text.lower().startswith("wifi:"):
+        elif lower_dec.startswith(("javascript:", "data:", "file:", "vbscript:")):
+            result["data_type"] = "HIGH_RISK_URI"
+        elif lower_dec.startswith(("intent://", "android-app://", "market://", "itms-apps://", "app://")):
+            result["data_type"] = "DEEP_LINK"
+        elif lower_dec.startswith("wifi:"):
             result["data_type"] = "WIFI_CONFIG"
-        elif decoded_text.lower().startswith("smsto:") or decoded_text.lower().startswith("sms:"):
+        elif lower_dec.startswith(("smsto:", "sms:")):
             result["data_type"] = "SMS"
-        elif decoded_text.lower().startswith("mailto:") or "@" in decoded_text and " " not in decoded_text:
+        elif lower_dec.startswith("mailto:") or ("@" in decoded_text and " " not in decoded_text):
             result["data_type"] = "EMAIL"
-        elif decoded_text.lower().startswith("tel:"):
+        elif lower_dec.startswith("tel:"):
             result["data_type"] = "TELEPHONE"
-        elif decoded_text.lower().startswith("mecard:") or decoded_text.lower().startswith("begin:vcard"):
+        elif lower_dec.startswith("geo:"):
+            result["data_type"] = "GEOLOCATION"
+        elif lower_dec.startswith(("mecard:", "begin:vcard")):
             result["data_type"] = "VCARD"
+        elif (decoded_text.startswith("{") and decoded_text.endswith("}")) or (decoded_text.startswith("[") and decoded_text.endswith("]")):
+            try:
+                json.loads(decoded_text)
+                result["data_type"] = "JSON"
+            except Exception:
+                result["data_type"] = "TEXT"
         else:
             result["data_type"] = "TEXT"
 
@@ -333,7 +437,7 @@ def normalize_qr_url(url: str, original_payload: Optional[str] = None) -> Dict[s
 
 
 # =====================================================================
-# 3. REDIRECT CHAIN TRACING (SAFE STATIC ANALYSIS)
+# 3. REDIRECT CHAIN TRACING (SAFE STATIC ANALYSIS WITH SSRF PROTECTION)
 # =====================================================================
 
 def trace_redirect_chain(
@@ -343,6 +447,7 @@ def trace_redirect_chain(
 ) -> Dict[str, Any]:
     """
     Safely traces the HTTP redirect chain of the QR-derived URL without executing content.
+    Enforces SSRF validation on every hop destination (blocks private, loopback, metadata).
     Follows redirects up to max_redirects limit with timeout.
     """
     result = {
@@ -364,6 +469,22 @@ def trace_redirect_chain(
 
     for hop_idx in range(max_redirects):
         try:
+            parsed_hop = urllib.parse.urlparse(current_url)
+            hop_hostname = parsed_hop.hostname or ""
+
+            # SSRF validation before network call
+            resolved_ip, ssrf_err = _resolve_target_ip(hop_hostname)
+            if ssrf_err == "target_restricted":
+                result["errors"].append(
+                    f"Redirect trace stopped at hop {hop_idx + 1}: destination host '{hop_hostname}' resolves to restricted/private IP ({resolved_ip})."
+                )
+                break
+            elif ssrf_err:
+                result["errors"].append(
+                    f"Redirect trace stopped at hop {hop_idx + 1}: {ssrf_err}"
+                )
+                break
+
             resp = session.get(
                 current_url,
                 allow_redirects=False,
@@ -384,6 +505,9 @@ def trace_redirect_chain(
             # Check if status code is redirect
             if status in (301, 302, 303, 307, 308) and location:
                 next_url = urllib.parse.urljoin(current_url, location)
+                if not re.match(r"^https?://", next_url, re.IGNORECASE):
+                    result["errors"].append(f"Redirect to non-HTTP URI scheme blocked: {next_url}")
+                    break
                 result["redirect_chain"].append(next_url)
                 current_url = next_url
             else:
@@ -505,24 +629,8 @@ def analyze_qr_modifications(
         return result
 
     try:
-        pil_image = None
-        if isinstance(image_input, str):
-            if image_input.startswith("data:image/") and ";base64," in image_input:
-                b64_data = image_input.split(";base64,")[1]
-                pil_image = Image.open(io.BytesIO(base64.b64decode(b64_data)))
-            elif os.path.exists(image_input):
-                pil_image = Image.open(image_input)
-            else:
-                try:
-                    pil_image = Image.open(io.BytesIO(base64.b64decode(image_input)))
-                except Exception:
-                    return result
-        elif isinstance(image_input, (bytes, bytearray)):
-            pil_image = Image.open(io.BytesIO(image_input))
-        elif isinstance(image_input, io.BytesIO):
-            pil_image = Image.open(image_input)
-
-        if not pil_image:
+        pil_image, load_err = _load_safe_image(image_input)
+        if load_err or not pil_image:
             return result
 
         img_np = np.array(pil_image.convert("RGB"))
@@ -578,7 +686,8 @@ def compile_qr_evidence(
 ) -> List[Dict[str, Any]]:
     """
     Compile standardized, source-traceable forensic evidence observations for Agent 18.
-    Adheres strictly to the research-grade Common Evidence Schema format (E18-XX).
+    Adheres strictly to the research-grade Common Evidence Schema format (E18-XX)
+    and declarative TCE polarity taxonomy.
     """
     evidence = []
 
@@ -594,7 +703,7 @@ def compile_qr_evidence(
             evidence_type="deterministic",
             evidence_strength=0.1,
             metadata=qr_decoding,
-            category="qr_decoding"
+            category="qr_format_parsed"
         ))
     else:
         evidence.append(create_evidence_item(
@@ -602,12 +711,12 @@ def compile_qr_evidence(
             index=1,
             finding="QR code decoding failed or unreadable payload",
             value=qr_decoding.get("error", "unreadable image"),
-            severity="high",
+            severity="info",
             source="QR Image Decoder",
             evidence_type="deterministic",
-            evidence_strength=0.8,
+            evidence_strength=0.1,
             metadata=qr_decoding,
-            category="qr_decoding"
+            category="qr_format_parsed"
         ))
 
     # 2. Embedded URL Evidence (E18-02)
@@ -616,76 +725,132 @@ def compile_qr_evidence(
         agent_id="A18",
         index=2,
         finding="Embedded web URL identification within QR payload",
-        value=embedded_url.get("url"),
+        value=embedded_url.get("url") if has_url else "No embedded URL",
         severity="info",
         source="QR Payload Parser",
         evidence_type="deterministic",
         evidence_strength=0.1,
         metadata=embedded_url,
-        category="embedded_url"
+        category="qr_format_parsed"
     ))
 
     # 3. URL Shortener Evidence (E18-03)
     has_shortener = shortened_data.get("detected", False)
-    evidence.append(create_evidence_item(
-        agent_id="A18",
-        index=3,
-        finding="URL shortening service utilization in QR payload",
-        value=shortened_data.get("provider") if has_shortener else "Direct Domain",
-        severity="medium" if has_shortener else "info",
-        source="Domain / Shortener Analyzer",
-        evidence_type="threat_intelligence",
-        evidence_strength=0.6 if has_shortener else 0.1,
-        metadata=shortened_data,
-        category="url_shortener"
-    ))
+    if has_shortener:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=3,
+            finding="URL shortening service utilization in QR payload",
+            value=shortened_data.get("provider"),
+            severity="medium",
+            source="Domain / Shortener Analyzer",
+            evidence_type="deterministic",
+            evidence_strength=0.6,
+            metadata=shortened_data,
+            category="url_shortener_redirect"
+        ))
+    else:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=3,
+            finding="Direct non-shortened destination domain in QR payload",
+            value="Direct Domain",
+            severity="info",
+            source="Domain / Shortener Analyzer",
+            evidence_type="deterministic",
+            evidence_strength=0.1,
+            metadata=shortened_data,
+            category="clean_qr_destination"
+        ))
 
     # 4. Redirect Chain Evidence (E18-04)
     redir_count = redirect_data.get("redirect_count", redirect_data.get("count", 0))
     has_redirects = redirect_data.get("has_redirects", False) or redir_count > 0
-    evidence.append(create_evidence_item(
-        agent_id="A18",
-        index=4,
-        finding="Multi-hop HTTP redirection chain execution",
-        value=redir_count,
-        severity="medium" if has_redirects else "info",
-        source="HTTP Redirect Tracer",
-        evidence_type="deterministic",
-        evidence_strength=0.6 if has_redirects else 0.1,
-        metadata=redirect_data,
-        category="redirect_chain"
-    ))
+    if has_redirects:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=4,
+            finding="Multi-hop HTTP redirection chain execution",
+            value=redir_count,
+            severity="medium",
+            source="HTTP Redirect Tracer",
+            evidence_type="deterministic",
+            evidence_strength=0.6,
+            metadata=redirect_data,
+            category="automatic_client_redirect"
+        ))
+    else:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=4,
+            finding="Single-hop direct HTTP route without redirection",
+            value=0,
+            severity="info",
+            source="HTTP Redirect Tracer",
+            evidence_type="deterministic",
+            evidence_strength=0.1,
+            metadata=redirect_data,
+            category="clean_http_route"
+        ))
 
     # 5. Hidden Parameter & Open-Redirect Evidence (E18-05)
     has_open_redir = len(hidden_params) > 0
-    evidence.append(create_evidence_item(
-        agent_id="A18",
-        index=5,
-        finding="Open-redirect and hidden query parameter inspection",
-        value=[p.get("parameter_name") for p in hidden_params],
-        severity="high" if has_open_redir else "info",
-        source="URL Query Parser",
-        evidence_type="inference",
-        evidence_strength=0.85 if has_open_redir else 0.05,
-        metadata={"hidden_parameters": hidden_params},
-        category="hidden_parameters"
-    ))
+    if has_open_redir:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=5,
+            finding="Open-redirect and hidden query parameter inspection",
+            value=[p.get("parameter_name") for p in hidden_params],
+            severity="high",
+            source="URL Query Parser",
+            evidence_type="inference",
+            evidence_strength=0.75,
+            metadata={"hidden_parameters": hidden_params},
+            category="hidden_redirect_parameter"
+        ))
+    else:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=5,
+            finding="Query parameter structure contains no open-redirect indicators",
+            value="Clean Query Parameters",
+            severity="info",
+            source="URL Query Parser",
+            evidence_type="deterministic",
+            evidence_strength=0.05,
+            metadata={"hidden_parameters": hidden_params},
+            category="clean_query_parameters"
+        ))
 
     # 6. QR Modification Evidence (E18-06)
     mod_status = mod_analysis.get("status", "unknown")
     is_modified = mod_status in ("detected", "suspected")
-    evidence.append(create_evidence_item(
-        agent_id="A18",
-        index=6,
-        finding="Visual alteration and physical sticker/overlay analysis",
-        value=mod_status,
-        severity="high" if is_modified else "info",
-        source="QR Image Distortion Analyzer",
-        evidence_type="inference",
-        evidence_strength=0.8 if is_modified else 0.1,
-        metadata=mod_analysis,
-        category="modification_analysis"
-    ))
+    if is_modified:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=6,
+            finding="Visual alteration and physical sticker/overlay analysis",
+            value=mod_status,
+            severity="medium",
+            source="QR Image Distortion Analyzer",
+            evidence_type="inference",
+            evidence_strength=0.65,
+            metadata=mod_analysis,
+            category="qr_visual_modification"
+        ))
+    else:
+        evidence.append(create_evidence_item(
+            agent_id="A18",
+            index=6,
+            finding="Uniform visual pattern with no physical overlay detected",
+            value=mod_status,
+            severity="info",
+            source="QR Image Distortion Analyzer",
+            evidence_type="deterministic",
+            evidence_strength=0.1,
+            metadata=mod_analysis,
+            category="clean_qr_image_structure"
+        ))
 
     # 7. Error Correction Evidence (E18-07)
     evidence.append(create_evidence_item(
@@ -698,7 +863,7 @@ def compile_qr_evidence(
         evidence_type="deterministic",
         evidence_strength=0.1,
         metadata=error_correction,
-        category="error_correction"
+        category="qr_format_parsed"
     ))
 
     return evidence

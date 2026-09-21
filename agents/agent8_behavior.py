@@ -143,7 +143,10 @@ def normalize_url(raw_url: str) -> dict:
     domain = hostname
     if _TLDEXTRACT_AVAILABLE and hostname:
         ext = tldextract.extract(hostname)
-        reg_dom = getattr(ext, 'top_domain_under_public_suffix', None) or getattr(ext, 'registered_domain', '')
+        if hasattr(ext, "top_domain_under_public_suffix"):
+            reg_dom = ext.top_domain_under_public_suffix
+        else:
+            reg_dom = getattr(ext, 'registered_domain', '')
         if reg_dom:
             domain = reg_dom.lower()
     elif hostname:
@@ -172,7 +175,10 @@ def _extract_domain(url: str) -> str:
             return ""
         if _TLDEXTRACT_AVAILABLE:
             ext = tldextract.extract(hostname)
-            reg_dom = getattr(ext, 'top_domain_under_public_suffix', None) or getattr(ext, 'registered_domain', '')
+            if hasattr(ext, "top_domain_under_public_suffix"):
+                reg_dom = ext.top_domain_under_public_suffix
+            else:
+                reg_dom = getattr(ext, 'registered_domain', '')
             if reg_dom:
                 return reg_dom.lower()
         parts = hostname.split(".")
@@ -346,20 +352,28 @@ def analyze_popups(soup: BeautifulSoup, html: str) -> dict:
             evidence.append("window focus/blur manipulation")
             seen.add("window focus/blur manipulation")
 
-    # Fullscreen overlay triggers on load
-    if re.search(r"(?:onload|DOMContentLoaded).*?modal|popup", html, re.I):
+    # Fullscreen overlay triggers on load (proper group precedence)
+    if re.search(r"(?:onload|DOMContentLoaded).*?(?:modal|popup)", html, re.I):
         if "auto-triggered modal/popup on page load" not in seen:
             evidence.append("auto-triggered modal/popup on page load")
             seen.add("auto-triggered modal/popup on page load")
 
     # Alert/prompt on load
-    if re.search(r"(?:onload|DOMContentLoaded).*?alert\s*\(|confirm\s*\(|prompt\s*\(", html, re.I):
+    if re.search(r"(?:onload|DOMContentLoaded).*?(?:alert|confirm|prompt)\s*\(", html, re.I):
         if "automatic alert/prompt dialog" not in seen:
             evidence.append("automatic alert/prompt dialog")
             seen.add("automatic alert/prompt dialog")
 
+    # Aggressive popups require blur/focus hijacking or multiple popups on load
+    has_aggressive_popups = (
+        "window focus/blur manipulation" in seen or
+        len(win_open_matches) >= 3 or
+        ("auto-triggered modal/popup on page load" in seen and "automatic alert/prompt dialog" in seen)
+    )
+
     return {
         "detected": bool(evidence),
+        "has_aggressive_popups": has_aggressive_popups,
         "count": len(evidence),
         "evidence": evidence
     }
@@ -446,6 +460,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
     Statically inspect scripts for suspicious patterns (eval, obfuscation, injection).
     """
     indicators = []
+    has_suspicious_obfuscation = False
     seen = set()
 
     # 1. eval() usage
@@ -469,7 +484,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
             "evidence": "document.write() DOM manipulation"
         })
 
-    # 4. Dynamic script injection
+    # 4. Dynamic script injection (informational baseline for loaders)
     if re.search(r"document\.createElement\s*\(\s*['\"]script['\"]\s*\)", html, re.I):
         indicators.append({
             "type": "dynamic_script_injection",
@@ -484,9 +499,9 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
         })
 
     # 6. Heavily encoded / base64 string payloads
-    # Look for long base64 strings in script blocks (>= 200 consecutive base64 chars)
     b64_matches = re.findall(r"(?:atob\s*\(|['\"][A-Za-z0-9+/]{200,}={0,2}['\"])", html)
     if b64_matches:
+        has_suspicious_obfuscation = True
         indicators.append({
             "type": "obfuscation",
             "evidence": "Large base64-encoded string payload / atob() decode"
@@ -496,6 +511,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
     hex_escapes = re.findall(r"(?:\\x[0-9a-fA-F]{2}){8,}", html)
     unicode_escapes = re.findall(r"(?:\\u[0-9a-fA-F]{4}){6,}", html)
     if hex_escapes or unicode_escapes:
+        has_suspicious_obfuscation = True
         indicators.append({
             "type": "obfuscation",
             "evidence": "Consecutive hex/unicode escape sequence encoding"
@@ -503,6 +519,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
 
     # 8. Suspicious credential interception / keylogger event listener
     if re.search(r"addEventListener\s*\(\s*['\"]key(?:press|down|up)['\"]", html, re.I):
+        has_suspicious_obfuscation = True
         indicators.append({
             "type": "keystroke_monitoring",
             "evidence": "Global keystroke event listener attached"
@@ -510,6 +527,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
 
     # 9. Right click / context menu disabling
     if re.search(r"oncontextmenu\s*=\s*['\"]return\s+false['\"]|addEventListener\s*\(\s*['\"]contextmenu['\"].*?preventDefault", html, re.I):
+        has_suspicious_obfuscation = True
         indicators.append({
             "type": "anti_analysis",
             "evidence": "Context menu / right-click disabled by script"
@@ -517,6 +535,7 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
 
     return {
         "detected": bool(indicators),
+        "has_suspicious_obfuscation": has_suspicious_obfuscation,
         "indicators": indicators
     }
 
@@ -524,6 +543,13 @@ def analyze_javascript_indicators(soup: BeautifulSoup, html: str) -> dict:
 # ---------------------------------------------------------------------------
 # 5 & 6. Form Submission Behavior & Hidden Forms
 # ---------------------------------------------------------------------------
+
+CSRF_TOKEN_PATTERNS = {
+    "csrf", "token", "session", "nonce", "_token", "authenticity_token",
+    "viewstate", "form_build_id", "crumb", "xsrf", "wpnonce",
+    "utm", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "utm_id", "utm_adgroup", "form_id", "drupal", "recaptcha", "g_recaptcha_response"
+}
 
 def analyze_forms(soup: BeautifulSoup, base_url: str, website_domain: str) -> tuple[list, list]:
     """
@@ -551,6 +577,7 @@ def analyze_forms(soup: BeautifulSoup, base_url: str, website_domain: str) -> tu
         all_inputs = form.find_all(["input", "textarea", "select"])
         field_names = []
         hidden_fields = []
+        suspicious_hidden_fields = []
         has_password = False
         has_sensitive = False
 
@@ -572,6 +599,11 @@ def analyze_forms(soup: BeautifulSoup, base_url: str, website_domain: str) -> tu
 
             if is_hidden_type or is_hidden_style:
                 hidden_fields.append(name)
+                # Check if this hidden field is a standard security/CSRF token
+                name_clean = name.lower().replace("-", "_")
+                is_csrf_token = any(token in name_clean for token in CSRF_TOKEN_PATTERNS)
+                if not is_csrf_token and (has_password or has_sensitive or inp_type == "password"):
+                    suspicious_hidden_fields.append(name)
 
         form_entry = {
             "form_index": idx,
@@ -592,7 +624,8 @@ def analyze_forms(soup: BeautifulSoup, base_url: str, website_domain: str) -> tu
             hidden_forms_result.append({
                 "form_index": idx,
                 "hidden_field_count": len(hidden_fields),
-                "hidden_fields": hidden_fields
+                "hidden_fields": hidden_fields,
+                "suspicious_hidden_fields": suspicious_hidden_fields
             })
 
     return forms_result, hidden_forms_result
@@ -790,18 +823,48 @@ def analyze_behavior(raw_url: str) -> dict:
 
     # Step 9: Compile structured evidence items
     evidence = []
-    evidence.append(create_evidence_item("A8", 1, "Automatic redirect behavior", redirects_info.get("detected", False), severity="low" if redirects_info.get("detected") else "info", source="HTTP tracer / HTML parser", evidence_type="deterministic", metadata=redirects_info))
-    evidence.append(create_evidence_item("A8", 2, "Aggressive popup indicators", popups_info.get("detected", False), severity="medium" if popups_info.get("detected") else "info", source="JavaScript DOM", evidence_type="deterministic", metadata=popups_info))
-    evidence.append(create_evidence_item("A8", 3, "Forced or immediate file downloads", forced_downloads_info.get("detected", False), severity="high" if forced_downloads_info.get("detected") else "info", source="HTTP / HTML", evidence_type="deterministic", metadata=forced_downloads_info))
-    evidence.append(create_evidence_item("A8", 4, "Suspicious JavaScript behavior patterns", js_indicators_info.get("detected", False), severity="medium" if js_indicators_info.get("detected") else "info", source="JavaScript AST analyzer", evidence_type="deterministic", metadata=js_indicators_info))
-    evidence.append(create_evidence_item("A8", 5, "Discovered form submission endpoints", len(forms_info), severity="info", source="HTML form parser", evidence_type="deterministic", metadata={"forms_count": len(forms_info), "forms": forms_info}))
-    evidence.append(create_evidence_item("A8", 6, "Hidden form submission fields", len(hidden_forms_info), severity="low" if hidden_forms_info else "info", source="HTML form parser", evidence_type="deterministic", metadata={"hidden_forms": hidden_forms_info}))
+    has_client_redirect = bool(redirects_info.get("client_side_redirects"))
+    has_http_redirect = bool(redirects_info.get("http_redirects", {}).get("detected"))
+    if has_client_redirect:
+        r_finding = "Suspicious automatic client-side redirect behavior"
+        r_sev = "low"
+        r_cat = "automatic_client_redirect"
+    elif has_http_redirect:
+        r_finding = "Standard HTTP-to-HTTPS / canonical URL redirect"
+        r_sev = "info"
+        r_cat = "clean_http_route"
+    else:
+        r_finding = "No automatic redirects detected"
+        r_sev = "info"
+        r_cat = "clean_http_route"
+
+    evidence.append(create_evidence_item("A8", 1, r_finding, redirects_info.get("detected", False), severity=r_sev, source="HTTP tracer / HTML parser", evidence_type="deterministic", metadata=redirects_info, category=r_cat))
+    has_aggr_popups = popups_info.get("has_aggressive_popups", False)
+    evidence.append(create_evidence_item("A8", 2, "Aggressive popup indicators", popups_info.get("detected", False), severity="medium" if has_aggr_popups else "info", source="JavaScript DOM", evidence_type="deterministic", metadata=popups_info, category="popup_flood" if has_aggr_popups else "server_banner_detected"))
+    evidence.append(create_evidence_item("A8", 3, "Forced or immediate file downloads", forced_downloads_info.get("detected", False), severity="high" if forced_downloads_info.get("detected") else "info", source="HTTP / HTML", evidence_type="deterministic", metadata=forced_downloads_info, category="forced_file_download"))
+    
+    has_obf_js = js_indicators_info.get("has_suspicious_obfuscation", False)
+    evidence.append(create_evidence_item("A8", 4, "Suspicious JavaScript behavior patterns", js_indicators_info.get("detected", False), severity="medium" if has_obf_js else "info", source="JavaScript AST analyzer", evidence_type="deterministic", metadata=js_indicators_info, category="obfuscated_javascript" if has_obf_js else "server_banner_detected"))
+    evidence.append(create_evidence_item("A8", 5, "Discovered form submission endpoints", len(forms_info), severity="info", source="HTML form parser", evidence_type="deterministic", metadata={"forms_count": len(forms_info), "forms": forms_info}, category="server_banner_detected"))
+    
+    has_susp_hidden = any(len(h.get("suspicious_hidden_fields", [])) > 0 for h in hidden_forms_info)
+    evidence.append(create_evidence_item(
+        "A8",
+        6,
+        "Suspicious hidden form fields detected" if has_susp_hidden else "Standard form hidden fields (CSRF tokens / session state)",
+        len(hidden_forms_info),
+        severity="low" if has_susp_hidden else "info",
+        source="HTML form parser",
+        evidence_type="deterministic",
+        metadata={"hidden_forms": hidden_forms_info},
+        category="hidden_form_fields" if has_susp_hidden else "server_banner_detected"
+    ))
     
     is_cred = cred_harvesting_info.get("detected", False)
-    evidence.append(create_evidence_item("A8", 7, "Credential harvesting form pattern", is_cred, severity="critical" if is_cred else "info", source="Form security analyzer", evidence_type="inference", evidence_strength=0.88 if is_cred else None, metadata=cred_harvesting_info))
+    evidence.append(create_evidence_item("A8", 7, "Credential harvesting form pattern", is_cred, severity="critical" if is_cred else "info", source="Form security analyzer", evidence_type="inference", evidence_strength=0.88 if is_cred else None, metadata=cred_harvesting_info, category="credential_harvesting"))
     
     is_fake = fake_login_info.get("detected", False)
-    evidence.append(create_evidence_item("A8", 8, "Deceptive login form structure", is_fake, severity="critical" if is_fake else "info", source="Form layout analyzer", evidence_type="inference", evidence_strength=0.85 if is_fake else None, metadata=fake_login_info))
+    evidence.append(create_evidence_item("A8", 8, "Deceptive login form structure", is_fake, severity="critical" if is_fake else "info", source="Form layout analyzer", evidence_type="inference", evidence_strength=0.85 if is_fake else None, metadata=fake_login_info, category="fake_login_form"))
 
     data_payload = {
         "automatic_redirects": redirects_info,

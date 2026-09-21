@@ -10,6 +10,7 @@ DO NOT calculate Trust/Risk score, phishing probability, or final verdict.
 
 import datetime
 import io
+import ipaddress
 import json
 import os
 import re
@@ -24,6 +25,10 @@ from services.evidence_schema import create_evidence_item, build_agent_result
 try:
     from PIL import Image
     _PIL_AVAILABLE = True
+    try:
+        Image.MAX_IMAGE_PIXELS = 10_000_000
+    except Exception:
+        pass
 except ImportError:
     _PIL_AVAILABLE = False
 
@@ -62,6 +67,52 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    if url.startswith("data:image/"):
+        return True
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 # =====================================================================
 # LOAD REFERENCE DATASETS (data/trusted_badges.json, data/payment_logos.json)
@@ -116,8 +167,12 @@ def _extract_registered_domain(url: str) -> str:
 
 
 def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[str], Optional[str], Optional[BeautifulSoup], List[str]]:
-    """Fetch HTML page safely with strict size and timeout limits."""
+    """Fetch HTML page safely with strict size, SSRF and timeout limits."""
     errors = []
+    if not _is_safe_url(url):
+        errors.append("Blocked potentially unsafe/private URL (SSRF protection)")
+        return None, url, None, errors
+
     try:
         resp = session.get(
             url,
@@ -148,6 +203,10 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
         return None, url, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirected to potentially unsafe/private URL (SSRF protection)")
+        return None, final_url, None, errors
+
     try:
         content_chunks = []
         downloaded = 0
@@ -172,7 +231,7 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
 # =====================================================================
 
 def _capture_screenshot(url: str) -> Tuple[Dict[str, Any], Optional[bytes]]:
-    """Attempt headless browser rendering and screenshot capture."""
+    """Attempt headless browser rendering and screenshot capture safely."""
     screenshot_analysis = {
         "status": "not_available",
         "screenshot_captured": False,
@@ -180,6 +239,10 @@ def _capture_screenshot(url: str) -> Tuple[Dict[str, Any], Optional[bytes]]:
         "height": None,
         "error": None,
     }
+
+    if not _is_safe_url(url):
+        screenshot_analysis["error"] = "Blocked potentially unsafe/private URL (SSRF protection)"
+        return screenshot_analysis, None
 
     if not _PLAYWRIGHT_AVAILABLE:
         screenshot_analysis["error"] = "Playwright browser automation not installed or unavailable"
@@ -770,7 +833,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
             source="Playwright / Headless Browser",
             evidence_type="deterministic",
             evidence_strength=0.1,
-            metadata={"screenshot_analysis": screenshot_result}
+            metadata={"screenshot_analysis": screenshot_result},
+            category="clean_dns_resolution"
         ))
     else:
         structured_evidence.append(create_evidence_item(
@@ -782,7 +846,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
             source="Playwright / Headless Browser",
             evidence_type="deterministic",
             evidence_strength=0.2,
-            metadata={"screenshot_analysis": screenshot_result}
+            metadata={"screenshot_analysis": screenshot_result},
+            category="clean_dns_resolution"
         ))
 
     # E10-02: OCR Text & Detected Terms
@@ -796,7 +861,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
         source="Tesseract OCR",
         evidence_type="deterministic",
         evidence_strength=0.6 if has_ocr else 0.1,
-        metadata=ocr_result
+        metadata=ocr_result,
+        category="urgency_manipulation_keywords" if has_ocr else "page_language_detected"
     ))
 
     # E10-03: Trust Badges
@@ -810,7 +876,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
         source="HTML DOM Inspection",
         evidence_type="deterministic",
         evidence_strength=0.75 if has_bad_badges else 0.2,
-        metadata=badges_result
+        metadata=badges_result,
+        category="scam_fraud_keywords" if has_bad_badges else "standard_port_open"
     ))
 
     # E10-04: Payment Logos
@@ -824,7 +891,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
         source="HTML & Checkout Analysis",
         evidence_type="deterministic",
         evidence_strength=0.8 if has_bad_payments else 0.2,
-        metadata=payment_result
+        metadata=payment_result,
+        category="fake_login_form" if has_bad_payments else "standard_port_open"
     ))
 
     # E10-05: Reviews & Testimonials
@@ -838,21 +906,23 @@ def analyze_visual(url: str) -> Dict[str, Any]:
         source="Testimonial DOM Heuristics",
         evidence_type="inference",
         evidence_strength=0.7 if has_bad_reviews else 0.1,
-        metadata=reviews_result
+        metadata=reviews_result,
+        category="unrealistic_claims" if has_bad_reviews else "page_language_detected"
     ))
 
     # E10-06: Visual Consistency
-    has_distorted = any("distorted" in ind.lower() or "fragmentation" in ind.lower() for ind in consistency_result.get("indicators", []))
+    has_distorted = any("distorted" in ind.lower() or "misaligned" in ind.lower() for ind in consistency_result.get("indicators", []))
     structured_evidence.append(create_evidence_item(
         agent_id="A10",
         index=6,
-        finding="Visual layout and typography consistency",
+        finding="Visual layout distortion or misaligned element anomaly" if has_distorted else "Visual layout and typography consistency verified",
         value=consistency_result.get("indicators", []),
         severity="medium" if has_distorted else "info",
         source="CSS / Layout Analysis",
         evidence_type="deterministic",
         evidence_strength=0.5 if has_distorted else 0.1,
-        metadata=consistency_result
+        metadata=consistency_result,
+        category="duplicate_scam_template" if has_distorted else "page_language_detected"
     ))
 
     # E10-07: Deceptive Design Patterns
@@ -866,7 +936,8 @@ def analyze_visual(url: str) -> Dict[str, Any]:
         source="Dark Pattern Heuristics",
         evidence_type="inference",
         evidence_strength=0.85 if has_patterns else 0.05,
-        metadata={"patterns": patterns_result}
+        metadata={"patterns": patterns_result},
+        category="urgency_manipulation_keywords" if has_patterns else "page_language_detected"
     ))
 
     print("[Agent 10] Visual analysis completed.")

@@ -130,8 +130,16 @@ def extract_domain_info(raw_url: str) -> dict:
     domain = hostname
     if _TLDEXTRACT_AVAILABLE and hostname:
         ext = tldextract.extract(hostname)
-        if ext.registered_domain:
-            domain = ext.registered_domain.lower()
+        if hasattr(ext, "top_domain_under_public_suffix"):
+            reg_dom = ext.top_domain_under_public_suffix
+            if reg_dom:
+                domain = reg_dom.lower()
+        else:
+            try:
+                if ext.domain and ext.suffix:
+                    domain = f"{ext.domain}.{ext.suffix}".lower()
+            except Exception:
+                pass
     elif hostname:
         # Fallback split
         parts = hostname.split(".")
@@ -418,13 +426,19 @@ def query_phishtank(original_url: str) -> dict:
         results_data = res_json.get("results", {})
 
         in_database = results_data.get("in_database", False)
-        if in_database:
+        in_database_bool = in_database in [True, "y", "Y", "yes", "YES", "1", 1] or (isinstance(in_database, bool) and in_database)
+        if in_database_bool:
             verified = results_data.get("verified", False)
+            verified_bool = verified in [True, "y", "Y", "yes", "YES", "1", 1]
+            valid = results_data.get("valid", True)
+            valid_bool = valid in [True, "y", "Y", "yes", "YES", "1", 1, None]
+            is_verified_phishing = verified_bool and valid_bool
             verified_at = results_data.get("verified_at")
             return {
                 "status": "success",
                 "found": True,
-                "verified_phishing": bool(verified),
+                "in_database": True,
+                "verified_phishing": is_verified_phishing,
                 "verification_date": verified_at or "Not Available",
                 "details_available": bool(results_data.get("phish_detail_page")),
                 "checked_at": checked_at
@@ -433,6 +447,7 @@ def query_phishtank(original_url: str) -> dict:
             return {
                 "status": "success",
                 "found": False,
+                "in_database": False,
                 "verified_phishing": False,
                 "checked_at": checked_at
             }
@@ -518,6 +533,7 @@ def query_openphish(original_url: str, hostname: str) -> dict:
             return {
                 "status": "success",
                 "found": True,
+                "in_feed": True,
                 "matched_url": matched_url,
                 "feed_timestamp": feed_ts or checked_at,
                 "checked_at": checked_at
@@ -526,6 +542,7 @@ def query_openphish(original_url: str, hostname: str) -> dict:
             return {
                 "status": "success",
                 "found": False,
+                "in_feed": False,
                 "checked_at": checked_at
             }
 
@@ -674,8 +691,10 @@ def query_urlhaus(original_url: str, hostname: str) -> dict:
                     if not date_added:
                         date_added = host_json.get("firstseen")
 
+        threat_detected = bool(url_found or host_found)
         return {
             "status": "success",
+            "threat_detected": threat_detected,
             "url_found": url_found,
             "host_found": host_found,
             "threat": threat or "None",
@@ -1193,32 +1212,63 @@ def analyze_reputation(raw_url: str) -> dict:
     
     vt_mal = vt_res.get("malicious", 0) if isinstance(vt_res, dict) else 0
     vt_sev = "critical" if vt_mal > 0 else "info"
-    evidence.append(create_evidence_item("A6", 1, "VirusTotal malicious detection count", vt_mal, severity=vt_sev, source="VirusTotal", evidence_type="threat_intelligence", evidence_strength=0.95 if vt_mal > 0 else None, metadata=vt_res if isinstance(vt_res, dict) else {}))
+    evidence.append(create_evidence_item("A6", 1, "VirusTotal malicious detection count", vt_mal, severity=vt_sev, source="VirusTotal", evidence_type="threat_intelligence", evidence_strength=0.95 if vt_mal > 0 else None, metadata=vt_res if isinstance(vt_res, dict) else {}, category="threat_intel_blocklist" if vt_mal > 0 else "clean_reputation_check"))
     
     gsb_match = gsb_res.get("threat_detected", False) if isinstance(gsb_res, dict) else False
-    evidence.append(create_evidence_item("A6", 2, "Google Safe Browsing threat match", gsb_match, severity="critical" if gsb_match else "info", source="Google Safe Browsing", evidence_type="threat_intelligence", evidence_strength=0.98 if gsb_match else None, metadata=gsb_res if isinstance(gsb_res, dict) else {}))
+    evidence.append(create_evidence_item("A6", 2, "Google Safe Browsing threat match", gsb_match, severity="critical" if gsb_match else "info", source="Google Safe Browsing", evidence_type="threat_intelligence", evidence_strength=0.98 if gsb_match else None, metadata=gsb_res if isinstance(gsb_res, dict) else {}, category="phishing_feed_match" if gsb_match else "clean_reputation_check"))
     
-    pt_match = pt_res.get("in_database", False) if isinstance(pt_res, dict) else False
-    evidence.append(create_evidence_item("A6", 3, "PhishTank phishing verified match", pt_match, severity="critical" if pt_match else "info", source="PhishTank", evidence_type="threat_intelligence", evidence_strength=0.95 if pt_match else None, metadata=pt_res if isinstance(pt_res, dict) else {}))
+    pt_verified = bool(pt_res.get("verified_phishing")) if isinstance(pt_res, dict) else False
+    pt_in_db = bool(pt_res.get("in_database") or pt_res.get("found")) if isinstance(pt_res, dict) else False
     
-    op_match = op_res.get("in_feed", False) if isinstance(op_res, dict) else False
-    evidence.append(create_evidence_item("A6", 4, "OpenPhish feed detection match", op_match, severity="critical" if op_match else "info", source="OpenPhish", evidence_type="threat_intelligence", evidence_strength=0.95 if op_match else None, metadata=op_res if isinstance(op_res, dict) else {}))
+    if pt_verified:
+        pt_sev = "critical"
+        pt_cat = "phishing_feed_match"
+        pt_str = 0.95
+        pt_desc = "PhishTank phishing verified match"
+        pt_val = True
+    elif pt_in_db:
+        pt_sev = "info"
+        pt_cat = "clean_reputation_check"
+        pt_str = None
+        pt_desc = "PhishTank unverified community submission (not verified phishing)"
+        pt_val = False
+    else:
+        pt_sev = "info"
+        pt_cat = "clean_reputation_check"
+        pt_str = None
+        pt_desc = "PhishTank phishing verified match"
+        pt_val = False
+
+    evidence.append(create_evidence_item(
+        "A6", 3, pt_desc, pt_val,
+        severity=pt_sev,
+        source="PhishTank",
+        evidence_type="threat_intelligence",
+        evidence_strength=pt_str,
+        metadata=pt_res if isinstance(pt_res, dict) else {},
+        category=pt_cat
+    ))
+    
+    op_match = bool(op_res.get("found") or op_res.get("in_feed")) if isinstance(op_res, dict) else False
+    evidence.append(create_evidence_item("A6", 4, "OpenPhish feed detection match", op_match, severity="critical" if op_match else "info", source="OpenPhish", evidence_type="threat_intelligence", evidence_strength=0.95 if op_match else None, metadata=op_res if isinstance(op_res, dict) else {}, category="phishing_feed_match" if op_match else "clean_reputation_check"))
     
     abuse_score = abuse_res.get("abuse_confidence_score", 0) if isinstance(abuse_res, dict) else 0
     abuse_sev = "high" if (isinstance(abuse_score, (int, float)) and abuse_score > 50) else "info"
-    evidence.append(create_evidence_item("A6", 5, "AbuseIPDB IP confidence score", abuse_score, severity=abuse_sev, source="AbuseIPDB", evidence_type="threat_intelligence", evidence_strength=0.90 if (isinstance(abuse_score, (int, float)) and abuse_score > 50) else None, metadata=abuse_res if isinstance(abuse_res, dict) else {}))
+    evidence.append(create_evidence_item("A6", 5, "AbuseIPDB IP confidence score", abuse_score, severity=abuse_sev, source="AbuseIPDB", evidence_type="threat_intelligence", evidence_strength=0.90 if (isinstance(abuse_score, (int, float)) and abuse_score > 50) else None, metadata=abuse_res if isinstance(abuse_res, dict) else {}, category="known_malicious_ip" if abuse_sev == "high" else "clean_reputation_check"))
     
-    uh_match = uh_res.get("threat_detected", False) if isinstance(uh_res, dict) else False
-    evidence.append(create_evidence_item("A6", 6, "URLhaus malware URL listing", uh_match, severity="critical" if uh_match else "info", source="URLhaus", evidence_type="threat_intelligence", evidence_strength=0.95 if uh_match else None, metadata=uh_res if isinstance(uh_res, dict) else {}))
+    uh_match = bool(uh_res.get("threat_detected") or uh_res.get("url_found") or uh_res.get("host_found")) if isinstance(uh_res, dict) else False
+    evidence.append(create_evidence_item("A6", 6, "URLhaus malware URL listing", uh_match, severity="critical" if uh_match else "info", source="URLhaus", evidence_type="threat_intelligence", evidence_strength=0.95 if uh_match else None, metadata=uh_res if isinstance(uh_res, dict) else {}, category="threat_intel_blocklist" if uh_match else "clean_reputation_check"))
     
     sh_match = sh_res.get("listed", False) if isinstance(sh_res, dict) else False
-    evidence.append(create_evidence_item("A6", 7, "Spamhaus blocklist listing", sh_match, severity="high" if sh_match else "info", source="Spamhaus", evidence_type="threat_intelligence", evidence_strength=0.90 if sh_match else None, metadata=sh_res if isinstance(sh_res, dict) else {}))
+    evidence.append(create_evidence_item("A6", 7, "Spamhaus blocklist listing", sh_match, severity="high" if sh_match else "info", source="Spamhaus", evidence_type="threat_intelligence", evidence_strength=0.90 if sh_match else None, metadata=sh_res if isinstance(sh_res, dict) else {}, category="blacklist_entry" if sh_match else "clean_reputation_check"))
     
-    bl_count = len(bl_res) if isinstance(bl_res, list) else 0
-    evidence.append(create_evidence_item("A6", 8, "Public DNSBL blacklists matches", bl_count, severity="medium" if bl_count > 0 else "info", source="DNSBL Blacklists", evidence_type="threat_intelligence", metadata={"blacklists": bl_res} if isinstance(bl_res, list) else {}))
+    bl_matches = [b for b in bl_res if isinstance(b, dict) and b.get("listed")] if isinstance(bl_res, list) else []
+    bl_count = len(bl_matches)
+    bl_sev = "medium" if bl_count > 0 else "info"
+    evidence.append(create_evidence_item("A6", 8, "Public DNSBL blacklists matches", bl_count, severity=bl_sev, source="DNSBL Blacklists", evidence_type="threat_intelligence", evidence_strength=0.85 if bl_count > 0 else None, metadata={"blacklists": bl_res, "matches": bl_matches} if isinstance(bl_res, list) else {}, category="blacklist_entry" if bl_count > 0 else "clean_reputation_check"))
     
-    evidence.append(create_evidence_item("A6", 9, "Scamadviser reputation analysis", sa_res.get("status") if isinstance(sa_res, dict) else "unavailable", severity="info", source="Scamadviser", evidence_type="external_source", metadata=sa_res if isinstance(sa_res, dict) else {}))
-    evidence.append(create_evidence_item("A6", 10, "Community reputation telemetry", cr_res.get("status") if isinstance(cr_res, dict) else "unavailable", severity="info", source="Community telemetry", evidence_type="external_source", metadata=cr_res if isinstance(cr_res, dict) else {}))
+    evidence.append(create_evidence_item("A6", 9, "Scamadviser reputation analysis", sa_res.get("status") if isinstance(sa_res, dict) else "unavailable", severity="info", source="Scamadviser", evidence_type="external_source", metadata=sa_res if isinstance(sa_res, dict) else {}, category="clean_reputation_check"))
+    evidence.append(create_evidence_item("A6", 10, "Community reputation telemetry", cr_res.get("status") if isinstance(cr_res, dict) else "unavailable", severity="info", source="Community telemetry", evidence_type="external_source", metadata=cr_res if isinstance(cr_res, dict) else {}, category="clean_reputation_check"))
 
     extra_fields = {
         "input": {

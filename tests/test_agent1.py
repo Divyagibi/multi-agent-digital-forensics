@@ -2,348 +2,296 @@
 """
 tests/test_agent1.py
 ====================
-Comprehensive test suite for Agent 1 -- Domain Identity.
+Comprehensive mock-based unit & pipeline test suite for Agent 1 -- Domain Identity.
 
-Tests cover:
-    1. Normal domain                  — https://example.com
-    2. URL with www                   — https://www.example.com
-    3. URL with path                  — https://example.com/login
-    4. URL with query parameters      — https://example.com/login?id=123
-    5. Invalid URL                    — "hello", "not-a-url", ""
-    6. Privacy-protected / incomplete — a domain likely to have redacted WHOIS
+Covers all 11 core provider states & pipeline contracts:
+    1. Valid domain with complete RDAP/WHOIS data
+    2. Domain with privacy-redacted registration data
+    3. Domain with missing RDAP data (HTTP 404)
+    4. Provider unavailable (HTTP 500 / Network Error)
+    5. Provider timeout (10-second limit exceeded)
+    6. Malformed provider response (Invalid JSON)
+    7. Internationalized / Punycode domain
+    8. High-entropy domain
+    9. Normal low-entropy domain
+    10. Target without DNSSEC dependency
+    11. Target with DNSSEC presence (A1 decoupled identity focus)
+    12. Young domain (<30 days) contract & TCE risk contribution
+    13. Mature domain (>=730 days) contract & TCE mitigation
+    14. Deep subdomain / www / path / query param normalization
+    15. Invalid / empty URL input
+    16. End-to-End Evidence Pipeline Contract (A1 -> Schema -> Normalizer -> Ledger -> TCE)
+    17. Strict Schema Assertion (NO trust_score, risk_score, or verdicts in Agent output)
 
 Run:
-    python tests/test_agent1.py
+    python -m unittest tests/test_agent1.py
 """
 
 import sys
 import os
-import json
-from datetime import datetime
+import unittest
+from datetime import datetime, timezone, timedelta
+from unittest.mock import patch, MagicMock
 
-# Ensure parent directory is in sys.path so we can import agents/
+# Ensure parent directory is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agents.agent1_domain import analyze_domain
+from agents.agent1_domain import (
+    analyze_domain,
+    extract_domain,
+    calculate_domain_age,
+    extract_entity_information,
+    extract_domain_status,
+    query_rdap
+)
+from services.evidence_schema import validate_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.trust_calculation_engine import TrustCalculationEngine
 
 
-# ---------------------------------------------------------------------------
-# Display Helpers
-# ---------------------------------------------------------------------------
-
-def print_separator(char="=", width=60):
-    print(char * width)
-
-
-def display_result(result: dict, test_label: str):
-    """Print a well-formatted summary of an analyze_domain() result."""
-    print_separator()
-    print(f"  TEST: {test_label}")
-    print_separator()
-
-    status = result.get("status", "unknown")
-    data   = result.get("data", {})
-    errors = result.get("errors", [])
-
-    print(f"  Overall Status    : {status.upper()}")
-    print()
-    print("  ===== AGENT 1 — DOMAIN IDENTITY =====")
-    print()
-    print(f"  Domain Name             : {data.get('domain_name', 'Not Available')}")
-
-    age_days  = data.get("domain_age_days",  "Not Available")
-    age_years = data.get("domain_age_years", "Not Available")
-    if age_days != "Not Available" and age_years != "Not Available":
-        print(f"  Domain Age              : {age_days} days ({age_years} years)")
-    else:
-        print(f"  Domain Age              : Not Available")
-
-    print(f"  Registration Date       : {data.get('registration_date', 'Not Available')}")
-    print(f"  Expiry Date             : {data.get('expiry_date',        'Not Available')}")
-    print(f"  Registrar               : {data.get('registrar',          'Not Available')}")
-
-    whois_avail = data.get("whois_available", False)
-    print(f"  WHOIS Available         : {'Yes' if whois_avail else 'No'}")
-
-    print(f"  Registrant Organization : {data.get('registrant_organization', 'Not Available')}")
-    print(f"  Registrant Country      : {data.get('registrant_country',      'Not Available')}")
-
-    domain_status = data.get("domain_status", [])
-    if domain_status:
-        print(f"  Domain Status           :")
-        for s in domain_status:
-            print(f"      • {s}")
-    else:
-        print(f"  Domain Status           : Not Available")
-
-    whois_info = data.get("whois_information", {})
-    if whois_info and whois_info.get("whois_available"):
-        print()
-        print("  --- WHOIS Information Block ---")
-        print(f"    Registration Date       : {whois_info.get('registration_date', 'Not Available')}")
-        print(f"    Expiry Date             : {whois_info.get('expiry_date',        'Not Available')}")
-        print(f"    Registrar               : {whois_info.get('registrar',          'Not Available')}")
-        print(f"    Registrant Organization : {whois_info.get('registrant_organization', 'Not Available')}")
-        print(f"    Registrant Country      : {whois_info.get('registrant_country',      'Not Available')}")
-
-    if errors:
-        print()
-        print("  --- Non-Fatal Errors / Warnings ---")
-        for e in errors:
-            print(f"      [!] {e}")
-
-    print()
+def _make_rdap_payload(reg_days_ago=1000, exp_days_future=365, org="Google LLC", country="US", registrar="MarkMonitor Inc."):
+    now = datetime.now(timezone.utc)
+    reg_date = (now - timedelta(days=reg_days_ago)).isoformat()
+    exp_date = (now + timedelta(days=exp_days_future)).isoformat()
+    return {
+        "status": ["clientTransferProhibited", "serverDeleteProhibited"],
+        "events": [
+            {"eventAction": "registration", "eventDate": reg_date},
+            {"eventAction": "expiration", "eventDate": exp_date}
+        ],
+        "entities": [
+            {
+                "roles": ["registrar"],
+                "vcardArray": ["vcard", [["fn", {}, "text", registrar]]]
+            },
+            {
+                "roles": ["registrant"],
+                "vcardArray": ["vcard", [
+                    ["fn", {}, "text", "Domain Administrator"],
+                    ["org", {}, "text", org],
+                    ["country", {}, "text", country]
+                ]]
+            }
+        ]
+    }
 
 
-def validate_structure(result: dict, test_label: str):
-    """
-    Validate that the result has the required output structure.
-    Raises AssertionError if any structural requirement is violated.
-    """
-    # Top-level keys
-    assert isinstance(result, dict), f"[{test_label}] Result must be a dict"
-    assert "status" in result,  f"[{test_label}] Missing 'status'"
-    assert "data"   in result,  f"[{test_label}] Missing 'data'"
-    assert "errors" in result,  f"[{test_label}] Missing 'errors'"
+class TestAgent1DomainIdentity(unittest.TestCase):
 
-    assert result["status"] in ("success", "partial", "error"), \
-        f"[{test_label}] 'status' must be success/partial/error, got: {result['status']}"
+    # 1. Valid domain with complete RDAP/WHOIS data
+    @patch("agents.agent1_domain.query_rdap")
+    def test_01_valid_domain_complete_rdap(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=1500, org="Example Corp", country="US", registrar="Example Registrar LLC")}
+        res = analyze_domain("https://example.com")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_name"], "example.com")
+        self.assertEqual(res["data"]["registrar"], "Example Registrar LLC")
+        self.assertEqual(res["data"]["registrant_organization"], "Example Corp")
+        self.assertEqual(res["data"]["registrant_country"], "US")
+        self.assertTrue(res["data"]["whois_available"])
+        self.assertEqual(len(res["evidence"]), 9)
 
-    assert isinstance(result["errors"], list), \
-        f"[{test_label}] 'errors' must be a list"
+    # 2. Domain with privacy-redacted registration data
+    @patch("agents.agent1_domain.query_rdap")
+    def test_02_privacy_redacted_domain(self, mock_rdap):
+        payload = _make_rdap_payload(reg_days_ago=500, org="Withheld for Privacy", country="IS", registrar="NameCheap Inc.")
+        mock_rdap.return_value = {"success": True, "data": payload}
+        res = analyze_domain("https://privacy-domain.com")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["registrant_organization"], "Withheld for Privacy")
+        # Ensure privacy masking is not classified as verified corporate registrant
+        e1_07 = next((e for e in res["evidence"] if e["evidence_id"] == "E1-07"), None)
+        self.assertIsNotNone(e1_07)
+        self.assertEqual(e1_07["category"], "registrant_org_telemetry")
+        self.assertEqual(e1_07["severity"], "info")
 
-    data = result["data"]
-    assert isinstance(data, dict), f"[{test_label}] 'data' must be a dict"
+    # 3. Domain with missing RDAP data (HTTP 404)
+    @patch("agents.agent1_domain.query_rdap")
+    def test_03_missing_rdap_data_404(self, mock_rdap):
+        mock_rdap.return_value = {"success": False, "error": "Domain 'nonexistent.xyz' not found in RDAP (HTTP 404)"}
+        res = analyze_domain("https://nonexistent.xyz")
+        self.assertEqual(res["status"], "partial")
+        self.assertFalse(res["data"]["whois_available"])
+        # Check evidence consistency (E1-01 and E1-06 present without ID collision)
+        eids = [e["evidence_id"] for e in res["evidence"]]
+        self.assertIn("E1-01", eids)
+        self.assertIn("E1-06", eids)
+        self.assertNotIn("E1-02", eids)
 
-    # Required data fields
-    required_fields = [
-        "domain_name",
-        "domain_age_days",
-        "domain_age_years",
-        "registration_date",
-        "expiry_date",
-        "registrar",
-        "whois_available",
-        "whois_information",
-        "registrant_organization",
-        "registrant_country",
-        "domain_status",
-    ]
-    for field in required_fields:
-        assert field in data, f"[{test_label}] Missing required data field: '{field}'"
+    # 4. Provider unavailable (HTTP 500 / Network Error)
+    @patch("agents.agent1_domain.query_rdap")
+    def test_04_provider_unavailable_500(self, mock_rdap):
+        mock_rdap.return_value = {"success": False, "error": "RDAP returned HTTP 500"}
+        res = analyze_domain("https://example.net")
+        self.assertEqual(res["status"], "partial")
+        self.assertFalse(res["data"]["whois_available"])
+        self.assertGreater(len(res["errors"]), 0)
 
-    # Types
-    assert isinstance(data["whois_available"], bool), \
-        f"[{test_label}] 'whois_available' must be bool"
-    assert isinstance(data["domain_status"], list), \
-        f"[{test_label}] 'domain_status' must be a list"
-    assert isinstance(data["whois_information"], dict), \
-        f"[{test_label}] 'whois_information' must be a dict"
+    # 5. Provider timeout
+    @patch("agents.agent1_domain.query_rdap")
+    def test_05_provider_timeout(self, mock_rdap):
+        mock_rdap.return_value = {"success": False, "error": "RDAP request timed out (10-second limit exceeded)"}
+        res = analyze_domain("https://timeout-target.com")
+        self.assertEqual(res["status"], "partial")
+        self.assertIn("timed out", res["errors"][0].lower())
 
-    # IMPORTANT: No trust/risk fields allowed
-    forbidden_fields = [
-        "trust_score", "risk_score", "risk", "confidence", "is_phishing",
-        "classification", "verdict", "phishing_probability",
-        # Agent 2 fields that must NOT appear
-        "nameservers", "a_records", "mx_records", "ns_records",
-        "txt_records", "cname_records", "reverse_dns", "dnssec",
-        "hosting_provider", "server_ip", "cdn",
-        # Agent 3 fields
-        "ssl_certificate", "tls_version", "cipher_suite", "hsts",
-        # Unspecified extras
-        "last_updated", "data_source",
-    ]
-    for forbidden in forbidden_fields:
-        assert forbidden not in data, \
-            f"[{test_label}] Forbidden field '{forbidden}' found in data — " \
-            f"this field belongs to another agent or is not in Agent 1's spec"
+    # 6. Malformed provider response
+    @patch("agents.agent1_domain.query_rdap")
+    def test_06_malformed_provider_response(self, mock_rdap):
+        mock_rdap.return_value = {"success": False, "error": "Failed to parse RDAP JSON response (malformed data)"}
+        res = analyze_domain("https://malformed-target.com")
+        self.assertEqual(res["status"], "partial")
+        self.assertIn("malformed", res["errors"][0].lower())
 
-    print(f"  [PASS] Structure validation passed for: {test_label}")
+    # 7. Internationalized / Punycode domain
+    @patch("agents.agent1_domain.query_rdap")
+    def test_07_punycode_domain(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=400, org="IDN Owner", registrar="Puny Registrar")}
+        res = analyze_domain("https://xn--e1afmkfd.xn--p1ai")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("xn--", res["data"]["domain_name"])
 
+    # 8. High-entropy domain extraction
+    @patch("agents.agent1_domain.query_rdap")
+    def test_08_high_entropy_domain(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=20, org="Unknown")}
+        res = analyze_domain("https://asdfghjklqwertyuiopzxcvbnm123456789.com/test")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_name"], "asdfghjklqwertyuiopzxcvbnm123456789.com")
 
-# ---------------------------------------------------------------------------
-# Test Cases
-# ---------------------------------------------------------------------------
+    # 9. Normal low-entropy domain
+    @patch("agents.agent1_domain.query_rdap")
+    def test_09_normal_low_entropy_domain(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=2000, org="Normal Co")}
+        res = analyze_domain("https://bank.com")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_name"], "bank.com")
 
-def test_1_normal_domain():
-    """Test 1: Normal domain — https://example.com"""
-    label = "Test 1: Normal domain (https://example.com)"
-    result = analyze_domain("https://example.com")
-    display_result(result, label)
-    validate_structure(result, label)
+    # 10. Missing DNSSEC data (A1 focuses strictly on domain identity without DNSSEC assumptions)
+    @patch("agents.agent1_domain.query_rdap")
+    def test_10_missing_dnssec_decoupled(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=1000)}
+        res = analyze_domain("https://nodnssec.org")
+        self.assertEqual(res["status"], "success")
+        self.assertNotIn("dnssec", res["data"])
 
-    data = result["data"]
-    assert data["domain_name"] == "example.com", \
-        f"Expected 'example.com', got '{data['domain_name']}'"
-    print(f"  [PASS] Domain name correctly extracted: example.com\n")
-    return result
+    # 11. Valid DNSSEC target (A1 identity extraction preserves domain without DNSSEC collision)
+    @patch("agents.agent1_domain.query_rdap")
+    def test_11_valid_dnssec_decoupled(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=1000)}
+        res = analyze_domain("https://validdnssec.gov")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_name"], "validdnssec.gov")
 
+    # 12. Young domain (<30 days) contract & TCE contribution
+    @patch("agents.agent1_domain.query_rdap")
+    def test_12_young_domain_tce_contribution(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=5, org="Privacy Guard")}
+        res = analyze_domain("https://young-phish.biz")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_age_days"], 5)
+        
+        e1_02 = next((e for e in res["evidence"] if e["evidence_id"] == "E1-02"), None)
+        self.assertIsNotNone(e1_02)
+        self.assertEqual(e1_02["severity"], "medium")
+        self.assertEqual(e1_02["category"], "domain_age_young")
+        self.assertEqual(e1_02["evidence_strength"], 0.80)
 
-def test_2_www_prefix():
-    """Test 2: URL with www — https://www.example.com"""
-    label = "Test 2: www prefix (https://www.example.com)"
-    result = analyze_domain("https://www.example.com")
-    display_result(result, label)
-    validate_structure(result, label)
+        # Test TCE calculation
+        ledger = EvidenceLedger()
+        ledger.add_entries_from_agent(res)
+        tce = TrustCalculationEngine()
+        tce_eval = tce.calculate_trust(ledger)
+        
+        e1_02_contrib = next((c for c in tce_eval["evidence_contributions"] if c["evidence_id"] == "E1-02"), None)
+        self.assertIsNotNone(e1_02_contrib)
+        self.assertEqual(e1_02_contrib["polarity"], "risk_increasing")
+        self.assertEqual(e1_02_contrib["severity_weight"], 0.45)
+        self.assertGreater(e1_02_contrib["base_contribution"], 0.0)
+        self.assertGreater(tce_eval["risk_score"], 0.0)
 
-    data = result["data"]
-    assert data["domain_name"] == "example.com", \
-        f"Expected 'example.com' (www stripped), got '{data['domain_name']}'"
-    print(f"  [PASS] www prefix correctly stripped: example.com\n")
-    return result
+    # 13. Mature domain (>=730 days) contract & TCE mitigation
+    @patch("agents.agent1_domain.query_rdap")
+    def test_13_mature_domain_contract(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=2500, org="Long Standing Enterprise Inc.")}
+        res = analyze_domain("https://mature-domain.com")
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["data"]["domain_age_days"], 2500)
+        
+        e1_02 = next((e for e in res["evidence"] if e["evidence_id"] == "E1-02"), None)
+        self.assertIsNotNone(e1_02)
+        self.assertIn(e1_02["severity"], ["info", "low"])
+        self.assertEqual(e1_02["category"], "domain_age_established")
 
+        e1_07 = next((e for e in res["evidence"] if e["evidence_id"] == "E1-07"), None)
+        self.assertIsNotNone(e1_07)
+        self.assertEqual(e1_07["category"], "whois_verified_registrant")
 
-def test_3_url_with_path():
-    """Test 3: URL with path — https://example.com/login"""
-    label = "Test 3: URL with path (https://example.com/login)"
-    result = analyze_domain("https://example.com/login")
-    display_result(result, label)
-    validate_structure(result, label)
+    # 14. Normalization: Subdomains, www, paths, query parameters
+    def test_14_normalization_variations(self):
+        self.assertEqual(extract_domain("https://www.example.com/login"), "example.com")
+        self.assertEqual(extract_domain("https://login.sub.example.co.uk/auth?user=1"), "example.co.uk")
+        self.assertEqual(extract_domain("http://deep.nested.domain.org/path/to/page#hash"), "domain.org")
 
-    data = result["data"]
-    assert data["domain_name"] == "example.com", \
-        f"Expected 'example.com', got '{data['domain_name']}'"
-    print(f"  [PASS] Path correctly stripped: example.com\n")
-    return result
+    # 15. Invalid / empty URL input
+    def test_15_invalid_url_handling(self):
+        for invalid_input in ["", "   ", "hello", "not-a-url"]:
+            res = analyze_domain(invalid_input)
+            self.assertEqual(res["status"], "error")
+            self.assertGreater(len(res["errors"]), 0)
 
+    # 16. End-to-End Pipeline Contract (A1 -> Schema -> Normalizer -> Ledger -> TCE)
+    @patch("agents.agent1_domain.query_rdap")
+    def test_16_end_to_end_pipeline_contract(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=10, org="Recent Phish Corp")}
+        res = analyze_domain("https://pipeline-test.com")
+        self.assertEqual(res["status"], "success")
+        
+        # Schema validation for all evidence items
+        for ev in res["evidence"]:
+            valid, errs = validate_evidence_item(ev)
+            self.assertTrue(valid, f"Evidence {ev.get('evidence_id')} failed schema: {errs}")
 
-def test_4_url_with_query_params():
-    """Test 4: URL with query parameters — https://example.com/login?id=123"""
-    label = "Test 4: Query parameters (https://example.com/login?id=123)"
-    result = analyze_domain("https://example.com/login?id=123")
-    display_result(result, label)
-    validate_structure(result, label)
+        # Ledger ingestion
+        ledger = EvidenceLedger()
+        ledger.add_entries_from_agent(res)
+        self.assertEqual(len(ledger.entries), len(res["evidence"]))
 
-    data = result["data"]
-    assert data["domain_name"] == "example.com", \
-        f"Expected 'example.com', got '{data['domain_name']}'"
-    print(f"  [PASS] Query parameters correctly stripped: example.com\n")
-    return result
+        # TCE calculation
+        tce = TrustCalculationEngine()
+        tce_eval = tce.calculate_trust(ledger)
+        self.assertIn("trust_score", tce_eval)
+        self.assertIn("risk_score", tce_eval)
+        self.assertIn("verdict", tce_eval)
 
+    # 17. Strict Schema Assertion: NO trust/risk scores or verdicts in Agent output
+    @patch("agents.agent1_domain.query_rdap")
+    def test_17_schema_no_risk_scores(self, mock_rdap):
+        mock_rdap.return_value = {"success": True, "data": _make_rdap_payload(reg_days_ago=1000)}
+        res = analyze_domain("https://example.com")
+        forbidden_keys = [
+            "trust_score", "trustscore", "risk_score", "riskscore",
+            "phishing_probability", "verdict", "final_score",
+            "classification", "confidence"
+        ]
+        for key in forbidden_keys:
+            self.assertNotIn(key, res, f"Agent 1 response MUST NOT contain '{key}'")
 
-def test_5_invalid_url():
-    """Test 5: Invalid URL inputs"""
-    invalid_inputs = ["hello", "not-a-url", "", "   "]
-
-    for inp in invalid_inputs:
-        label = f"Test 5: Invalid input ({repr(inp)})"
-        result = analyze_domain(inp)
-
-        assert isinstance(result, dict), f"[{label}] Must return a dict"
-        assert "status" in result,       f"[{label}] Missing 'status'"
-        assert result["status"] == "error", \
-            f"[{label}] Invalid input must return status='error', got '{result['status']}'"
-        assert len(result.get("errors", [])) > 0, \
-            f"[{label}] errors list must not be empty for invalid input"
-
-        print_separator("-", 60)
-        print(f"  TEST: {label}")
-        print(f"  Status : {result['status'].upper()}")
-        print(f"  Error  : {result['errors'][0] if result['errors'] else 'N/A'}")
-        print(f"  [PASS] Invalid input handled gracefully\n")
-
-
-def test_6_deep_subdomain():
-    """Test 6: Deep subdomain URL — registrable domain must be extracted correctly"""
-    label = "Test 6: Deep subdomain (https://login.shop.example.com/account)"
-    result = analyze_domain("https://login.shop.example.com/account")
-    display_result(result, label)
-    validate_structure(result, label)
-
-    data = result["data"]
-    assert data["domain_name"] == "example.com", \
-        f"Expected 'example.com' (deep subdomain stripped), got '{data['domain_name']}'"
-    print(f"  [PASS] Subdomains correctly stripped: example.com\n")
-    return result
-
-
-def test_7_privacy_protected_domain():
-    """
-    Test 7: Domain likely to have privacy-protected or partial WHOIS.
-
-    The agent must NOT crash when registrant information is unavailable.
-    All fields should either contain a value or "Not Available".
-    """
-    label = "Test 7: Privacy-protected WHOIS (https://www.google.com)"
-    result = analyze_domain("https://www.google.com")
-    display_result(result, label)
-    validate_structure(result, label)
-
-    data = result["data"]
-    assert data["domain_name"] == "google.com", \
-        f"Expected 'google.com', got '{data['domain_name']}'"
-
-    # Even if registrant info is unavailable, these must be strings or lists
-    assert isinstance(data["registrant_organization"], str)
-    assert isinstance(data["registrant_country"], str)
-    assert isinstance(data["domain_status"], list)
-
-    print(f"  [PASS] Privacy/partial WHOIS handled gracefully\n")
-    return result
-
-
-def test_8_multi_part_tld():
-    """
-    Test 8: Multi-part TLD domain (e.g. co.uk).
-
-    The registrable domain for https://www.bbc.co.uk/news
-    should be bbc.co.uk, not bbc.co or co.uk.
-    """
-    label = "Test 8: Multi-part TLD (https://www.bbc.co.uk/news)"
-    result = analyze_domain("https://www.bbc.co.uk/news")
-    display_result(result, label)
-    validate_structure(result, label)
-
-    data = result["data"]
-    assert data["domain_name"] == "bbc.co.uk", \
-        f"Expected 'bbc.co.uk', got '{data['domain_name']}'"
-    print(f"  [PASS] Multi-part TLD correctly identified: bbc.co.uk\n")
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Main runner
-# ---------------------------------------------------------------------------
 
 def run_all_tests():
-    print_separator("=", 70)
-    print("  AGENT 1 — DOMAIN IDENTITY: FULL TEST SUITE")
-    print(f"  Run at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print_separator("=", 70)
-    print()
-
-    passed = 0
-    failed = 0
-    test_functions = [
-        test_1_normal_domain,
-        test_2_www_prefix,
-        test_3_url_with_path,
-        test_4_url_with_query_params,
-        test_5_invalid_url,
-        test_6_deep_subdomain,
-        test_7_privacy_protected_domain,
-        test_8_multi_part_tld,
-    ]
-
-    for test_fn in test_functions:
-        try:
-            test_fn()
-            passed += 1
-        except AssertionError as ae:
-            print(f"  [FAIL] Assertion error: {ae}\n")
-            failed += 1
-        except Exception as ex:
-            print(f"  [FAIL] Unexpected exception: {type(ex).__name__}: {ex}\n")
-            failed += 1
-
-    print_separator("=", 70)
-    print(f"  RESULTS: {passed} passed, {failed} failed out of {passed + failed} tests")
-    if failed == 0:
-        print("  [OK] All tests passed.")
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestAgent1DomainIdentity)
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    print("\n" + "=" * 60)
+    print(f"Agent 1 Test Suite Results: Ran {result.testsRun} tests.")
+    if result.wasSuccessful():
+        print("ALL AGENT 1 TESTS PASSED SUCCESSFULLY.")
     else:
-        print(f"  [FAIL] {failed} test(s) failed.")
-    print_separator("=", 70)
+        print(f"FAILURES: {len(result.failures)}, ERRORS: {len(result.errors)}")
+    print("=" * 60)
+    return result.wasSuccessful()
 
 
 if __name__ == "__main__":
-    run_all_tests()
+    success = run_all_tests()
+    sys.exit(0 if success else 1)

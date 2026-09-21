@@ -18,6 +18,7 @@ Strictly passive forensic evidence collection.
 DO NOT calculate final Trust Score or declare legitimate/scam.
 """
 
+import ipaddress
 import datetime
 import json
 import os
@@ -53,6 +54,52 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    if url.startswith("data:image/"):
+        return True
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 # Software / tech keywords for GitHub relevance
 TECH_RELEVANCE_KEYWORDS = {
@@ -122,8 +169,12 @@ def _extract_registered_domain(url: str) -> str:
 
 
 def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[str], Optional[str], Optional[BeautifulSoup], List[str]]:
-    """Fetch target webpage safely to extract base identity signals."""
+    """Fetch target webpage safely to extract base identity signals with strict size, SSRF and timeout limits."""
     errors = []
+    if not _is_safe_url(url):
+        errors.append("Blocked potentially unsafe/private URL (SSRF protection)")
+        return None, url, None, errors
+
     try:
         resp = session.get(
             url,
@@ -154,6 +205,10 @@ def _fetch_webpage_safe(url: str, session: requests.Session) -> Tuple[Optional[s
         return None, url, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirected to potentially unsafe/private URL (SSRF protection)")
+        return None, final_url, None, errors
+
     try:
         content_chunks = []
         downloaded = 0
@@ -1293,89 +1348,121 @@ def analyze_osint(url: str, search_override: Optional[Any] = None) -> Dict[str, 
         source="DOM Identity Resolver",
         evidence_type="deterministic",
         evidence_strength=0.1,
-        metadata=identity
+        metadata=identity,
+        category="osint_identity_resolved"
     ))
 
     # E13-02: LinkedIn Presence
+    has_li = bool(linkedin_res.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=2,
         finding="LinkedIn corporate page presence and employee footprint",
-        value=linkedin_res.get("detected", False),
+        value=has_li,
         severity="info",
         source="LinkedIn OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata=linkedin_res
+        evidence_strength=0.1 if has_li else 0.05,
+        metadata=linkedin_res,
+        category="social_presence_verified" if has_li else "no_social_presence_found"
     ))
 
     # E13-03: Facebook Presence
+    has_fb = bool(facebook_res.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=3,
         finding="Facebook official public page presence",
-        value=facebook_res.get("detected", False),
+        value=has_fb,
         severity="info",
         source="Facebook OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata=facebook_res
+        evidence_strength=0.1 if has_fb else 0.05,
+        metadata=facebook_res,
+        category="social_presence_verified" if has_fb else "no_social_presence_found"
     ))
 
     # E13-04: X/Twitter Presence
+    has_tw = bool(twitter_res.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=4,
         finding="X / Twitter account verification and handle corroboration",
-        value=twitter_res.get("detected", False),
+        value=has_tw,
         severity="info",
         source="Twitter OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata=twitter_res
+        evidence_strength=0.1 if has_tw else 0.05,
+        metadata=twitter_res,
+        category="social_presence_verified" if has_tw else "no_social_presence_found"
     ))
 
     # E13-05: Instagram Presence
+    has_ig = bool(instagram_res.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=5,
         finding="Instagram public profile presence",
-        value=instagram_res.get("detected", False),
+        value=has_ig,
         severity="info",
         source="Instagram OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata=instagram_res
+        evidence_strength=0.1 if has_ig else 0.05,
+        metadata=instagram_res,
+        category="social_presence_verified" if has_ig else "no_social_presence_found"
     ))
 
     # E13-06: GitHub Software Repositories
+    has_gh = bool(github_res.get("detected", False))
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=6,
         finding="GitHub organization repository footprint",
-        value=github_res.get("detected", False),
+        value=has_gh,
         severity="info",
         source="GitHub OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata=github_res
+        evidence_strength=0.1 if has_gh else 0.05,
+        metadata=github_res,
+        category="public_repository_present" if has_gh else "no_repository_found"
     ))
 
     # E13-07: Reddit Mentions & Sentiment
     has_scam_mentions = any(m.get("context") in ("scam_allegation", "warning") for m in reddit_mentions)
+    has_pos_mentions = any(m.get("context") in ("recommendation", "positive") for m in reddit_mentions)
+    has_rd = len(reddit_mentions) > 0
+    if has_scam_mentions:
+        rd_cat = "public_scam_discussion_found"
+        rd_sev = "medium"
+        rd_strength = 0.60
+    elif has_pos_mentions:
+        rd_cat = "positive_consumer_reputation"
+        rd_sev = "info"
+        rd_strength = 0.10
+    elif has_rd:
+        rd_cat = "public_discussions_found"
+        rd_sev = "info"
+        rd_strength = 0.10
+    else:
+        rd_cat = "no_public_discussions_found"
+        rd_sev = "info"
+        rd_strength = 0.05
+
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=7,
         finding="Reddit public community discussions and consumer mentions",
         value=len(reddit_mentions),
-        severity="high" if has_scam_mentions else "info",
+        severity=rd_sev,
         source="Reddit Public OSINT",
         evidence_type="external_source",
-        evidence_strength=0.75 if has_scam_mentions else 0.1,
-        metadata={"mentions": reddit_mentions}
+        evidence_strength=rd_strength,
+        metadata={"mentions": reddit_mentions},
+        category=rd_cat
     ))
 
     # E13-08: News & Media Articles
+    has_news = len(news_articles) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=8,
@@ -1384,25 +1471,42 @@ def analyze_osint(url: str, search_override: Optional[Any] = None) -> Dict[str, 
         severity="info",
         source="Public News Indices",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata={"news": news_articles}
+        evidence_strength=0.1 if has_news else 0.05,
+        metadata={"news": news_articles},
+        category="established_brand_official_domain" if has_news else "no_media_coverage_found"
     ))
 
     # E13-09: Public Consumer Reviews
-    has_bad_reviews = any(r.get("context") in ("scam_allegation", "complaint") for r in public_reviews)
+    has_bad_reviews = any(r.get("general_sentiment") == "negative" or r.get("context") in ("scam_allegation", "complaint") for r in public_reviews)
+    has_reviews = len(public_reviews) > 0
+    if has_bad_reviews:
+        rv_cat = "public_complaints_found"
+        rv_sev = "medium"
+        rv_strength = 0.65
+    elif has_reviews:
+        rv_cat = "positive_consumer_reputation"
+        rv_sev = "info"
+        rv_strength = 0.10
+    else:
+        rv_cat = "no_public_reviews_found"
+        rv_sev = "info"
+        rv_strength = 0.05
+
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=9,
         finding="Third-party consumer review platforms (Trustpilot, BBB)",
         value=len(public_reviews),
-        severity="high" if has_bad_reviews else "info",
+        severity=rv_sev,
         source="Review Aggregator OSINT",
         evidence_type="external_source",
-        evidence_strength=0.8 if has_bad_reviews else 0.1,
-        metadata={"reviews": public_reviews}
+        evidence_strength=rv_strength,
+        metadata={"reviews": public_reviews},
+        category=rv_cat
     ))
 
     # E13-10: Forum Discussions
+    has_forums = len(forum_discussions) > 0
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=10,
@@ -1411,22 +1515,38 @@ def analyze_osint(url: str, search_override: Optional[Any] = None) -> Dict[str, 
         severity="info",
         source="Web Forums OSINT",
         evidence_type="external_source",
-        evidence_strength=0.1,
-        metadata={"forums": forum_discussions}
+        evidence_strength=0.1 if has_forums else 0.05,
+        metadata={"forums": forum_discussions},
+        category="public_discussions_found" if has_forums else "no_public_discussions_found"
     ))
 
     # E13-11: External OSINT Consistency
     is_inconsistent = external_consistency.get("status") == "inconsistent"
+    is_consistent = external_consistency.get("status") == "consistent"
+    if is_inconsistent:
+        cons_cat = "brand_domain_mismatch"
+        cons_sev = "medium"
+        cons_strength = 0.75
+    elif is_consistent:
+        cons_cat = "social_presence_verified"
+        cons_sev = "info"
+        cons_strength = 0.10
+    else:
+        cons_cat = "osint_identity_unverified"
+        cons_sev = "info"
+        cons_strength = 0.05
+
     structured_evidence.append(create_evidence_item(
         agent_id="A13",
         index=11,
         finding="Cross-platform identity consistency and public corroboration",
         value=external_consistency.get("status", "unknown"),
-        severity="high" if is_inconsistent else "info",
+        severity=cons_sev,
         source="OSINT Cross-Corroboration Analyzer",
         evidence_type="inference",
-        evidence_strength=0.75 if is_inconsistent else 0.1,
-        metadata={"consistency": external_consistency, "presence": presence_summary, "context": context_summary}
+        evidence_strength=cons_strength,
+        metadata={"consistency": external_consistency, "presence": presence_summary, "context": context_summary},
+        category=cons_cat
     ))
 
     print("[Agent 13] External presence & OSINT investigation completed.")
@@ -1445,7 +1565,7 @@ def analyze_osint(url: str, search_override: Optional[Any] = None) -> Dict[str, 
         "external_identity_consistency": external_consistency,
         "presence_summary": presence_summary,
         "context_summary": context_summary,
-        "evidence": forensic_evidence,
+        "evidence_summary": forensic_evidence,
     }
 
     extra_fields = {

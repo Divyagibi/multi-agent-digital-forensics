@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 
 from agents.agent11_content_quality import (
     analyze_content_quality,
+    _is_safe_url,
+    _fetch_webpage_safe,
     _normalize_url,
     _extract_registered_domain,
     _extract_visible_text,
@@ -23,6 +25,11 @@ from agents.agent11_content_quality import (
     _detect_scam_keywords,
     SCAM_KEYWORDS_DATA
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
+from services.trust_calculation_engine import TrustCalculationEngine
 
 # Mock HTML Fixtures
 MOCK_SCAM_HTML = """
@@ -310,6 +317,115 @@ class TestAgent11ContentQuality(unittest.TestCase):
         soup = BeautifulSoup(malformed, "html.parser")
         raw_text, paras, sents, stats = _extract_visible_text(soup)
         self.assertIn("guaranteed returns", raw_text)
+
+    def test_25_ssrf_protection(self):
+        """Test 25: Verify SSRF protection rejects private, loopback, and metadata IPs."""
+        self.assertFalse(_is_safe_url("http://127.0.0.1:8000/phish"))
+        self.assertFalse(_is_safe_url("http://localhost:8080/test"))
+        self.assertFalse(_is_safe_url("http://169.254.169.254/latest/meta-data/"))
+        self.assertFalse(_is_safe_url("http://10.0.0.1/admin"))
+        self.assertFalse(_is_safe_url("http://192.168.1.1/secret"))
+        self.assertFalse(_is_safe_url("http://172.16.0.5/api"))
+        self.assertFalse(_is_safe_url("http://[::1]/internal"))
+        self.assertFalse(_is_safe_url("http://metadata.google.internal/computeMetadata/v1/"))
+        self.assertTrue(_is_safe_url("https://example.com/login"))
+        self.assertTrue(_is_safe_url("https://8.8.8.8/dns-query"))
+
+        # Fetch safe test
+        session = MagicMock()
+        html, final_url, soup, errors = _fetch_webpage_safe("http://127.0.0.1/admin", session)
+        self.assertIsNone(html)
+        self.assertTrue(any("SSRF" in err for err in errors))
+
+    def test_26_evidence_schema_and_ledger(self):
+        """Test 26: Validate all A11 evidence items comply with Common Evidence Schema and ledger ingestion."""
+        with patch("agents.agent11_content_quality.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://crypto-doubler-giveaway.xyz"
+            mock_resp.encoding = "utf-8"
+            mock_resp.iter_content.return_value = [MOCK_SCAM_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_content_quality("https://crypto-doubler-giveaway.xyz")
+            self.assertTrue(validate_agent_result(result))
+
+            evidence_items = result.get("evidence", [])
+            self.assertEqual(len(evidence_items), 8)
+
+            ledger = EvidenceLedger(target="https://crypto-doubler-giveaway.xyz")
+            ledger.add_entries_from_agent(result)
+            self.assertEqual(len(ledger.entries), 8)
+
+            # Check individual evidence structure
+            for item in evidence_items:
+                self.assertTrue(validate_evidence_item(item))
+                normalized = normalize_evidence_item(item, agent_identifier="A11", agent_result=result)
+                self.assertTrue(normalized["evidence_id"].startswith("E11-"))
+                self.assertIn(normalized["agent_id"], [11, "A11"])
+                self.assertEqual(normalized["provenance"]["source_agent"], "A11")
+                self.assertIn(normalized["severity"], ["info", "low", "medium", "high", "critical"])
+                self.assertIn(normalized["evidence_type"], ["deterministic", "inference", "threat_intelligence"])
+
+    def test_27_strict_schema_no_scores(self):
+        """Test 27: Verify A11 does NOT output trust scores, risk scores, or final verdicts."""
+        with patch("agents.agent11_content_quality.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://crypto-doubler-giveaway.xyz"
+            mock_resp.encoding = "utf-8"
+            mock_resp.iter_content.return_value = [MOCK_SCAM_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_content_quality("https://crypto-doubler-giveaway.xyz")
+
+            forbidden_keys = [
+                "trust_score", "risk_score", "verdict", "phishing_score",
+                "final_verdict", "decision", "reputation_score", "malicious_score"
+            ]
+            for key in forbidden_keys:
+                self.assertNotIn(key, result)
+                self.assertNotIn(key, result.get("data", {}))
+
+    def test_28_tce_integration_and_polarity(self):
+        """Test 28: Verify A11 evidence categories map to declarative TCE polarities."""
+        with patch("agents.agent11_content_quality.requests.Session") as mock_session_cls:
+            mock_session = MagicMock()
+            mock_session_cls.return_value = mock_session
+            mock_resp = MagicMock()
+            mock_resp.url = "https://crypto-doubler-giveaway.xyz"
+            mock_resp.encoding = "utf-8"
+            mock_resp.iter_content.return_value = [MOCK_SCAM_HTML.encode("utf-8")]
+            mock_session.get.return_value = mock_resp
+
+            result = analyze_content_quality("https://crypto-doubler-giveaway.xyz")
+            ledger = EvidenceLedger(target="https://crypto-doubler-giveaway.xyz")
+            ledger.add_entries_from_agent(result)
+
+            engine = TrustCalculationEngine()
+            tce_eval = engine.calculate_trust(ledger)
+            self.assertGreater(tce_eval["risk_score"], 0.0)
+
+            # Check individual polarity mapping
+            for item in result["evidence"]:
+                cat = item.get("category", "")
+                polarity = resolve_evidence_polarity(cat)
+                if cat in ("urgency_manipulation_keywords", "scam_fraud_keywords", "unrealistic_claims", "duplicate_scam_template", "ai_generated_phishing_text"):
+                    self.assertEqual(polarity, "risk_increasing")
+                elif cat == "page_language_detected":
+                    self.assertEqual(polarity, "neutral")
+
+    def test_29_a4_a11_scope_separation(self):
+        """Test 29: Confirm A11 analyzes content quality without duplicating A4 metadata responsibility."""
+        soup = BeautifulSoup(MOCK_CLEAN_ENGLISH_HTML, "html.parser")
+        raw_text, paras, sents, stats = _extract_visible_text(soup)
+
+        # A11 extracts plain text prose, ignoring title tag or meta tags for metadata claims
+        self.assertNotIn("<title>", raw_text)
+        self.assertNotIn("<meta", raw_text)
+        self.assertEqual(stats["word_count"], 39)
 
 
 if __name__ == "__main__":

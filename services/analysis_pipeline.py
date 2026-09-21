@@ -207,6 +207,81 @@ def _execute_aere_reasoning_layer(
         }
 
 
+def finalize_session_from_agent_results(
+    target_url: str,
+    agent_results: Dict[Union[str, int], Any],
+    input_type: str = "url",
+    original_input: Optional[str] = None,
+    session_id: Optional[str] = None,
+    aere_provider: Optional[Any] = None,
+    enable_aere: bool = True
+) -> Dict[str, Any]:
+    """
+    Finalize an authoritative investigation session from already-collected agent findings.
+    Performs normalization, Evidence Ledger construction, relationship correlation,
+    TCE Trust & Risk calculation, and AERE qualitative reasoning WITHOUT re-executing Agents 1–18.
+    """
+    session = create_analysis_session(
+        input_type=input_type,
+        original_input=original_input or target_url,
+        target_url=target_url
+    )
+    if session_id:
+        session["session_id"] = session_id
+
+    # Normalize agent keys (support 'agent1', '1', 1, 'A01', etc.)
+    for i in range(1, 19):
+        agent_key = f"agent{i}"
+        val = (
+            agent_results.get(agent_key) or
+            agent_results.get(str(i)) or
+            agent_results.get(i) or
+            agent_results.get(f"A{i}") or
+            agent_results.get(f"A{String(i).zfill(2)}" if False else None)
+        )
+        session["agents"][agent_key] = val
+
+    # Aggregate all evidence items into central store & Evidence Ledger
+    all_evidence = []
+    ledger = EvidenceLedger(target=target_url)
+
+    for i in range(1, 19):
+        agent_data = session["agents"].get(f"agent{i}")
+        if agent_data and isinstance(agent_data, dict):
+            ev_list = agent_data.get("evidence", [])
+            if isinstance(ev_list, list):
+                all_evidence.extend(ev_list)
+            ledger.add_entries_from_agent(agent_data)
+
+    ledger.correlate_relationships()
+
+    # Calculate Trust & Risk via deterministic TCE (Sole authority)
+    tce = TrustCalculationEngine()
+    tce_res = tce.calculate_trust(ledger)
+
+    session["all_evidence"] = all_evidence
+    session["evidence_ledger"] = ledger.to_dict()
+    session["tce_summary"] = tce_res
+    session["status"] = "completed"
+    session["trust_score"] = tce_res["trust_score"]
+    session["risk_score"] = tce_res["risk_score"]
+    session["verdict"] = tce_res["verdict"]
+
+    # Execute AERE Evidence Reasoning Layer (Additive, Sovereign TCE)
+    if enable_aere:
+        session["aere"] = _execute_aere_reasoning_layer(
+            ledger=ledger,
+            tce_res=tce_res,
+            target=target_url,
+            session_id=session.get("session_id"),
+            aere_provider=aere_provider
+        )
+    else:
+        session["aere"] = None
+
+    return session
+
+
 def run_full_pipeline(
     input_data: Union[str, bytes],
     input_type: str = "url",
@@ -281,42 +356,13 @@ def run_full_pipeline(
     # Attach Agent 18 result
     session["agents"]["agent18"] = agent18_result
 
-    # Aggregate all evidence items into central store
-    all_evidence = []
-    ledger = EvidenceLedger(target=target_url)
+    return finalize_session_from_agent_results(
+        target_url=target_url,
+        agent_results=session["agents"],
+        input_type=input_type,
+        original_input=session["original_input"],
+        session_id=session["session_id"],
+        aere_provider=aere_provider,
+        enable_aere=enable_aere
+    )
 
-    for i in range(1, 19):
-        agent_data = session["agents"].get(f"agent{i}")
-        if agent_data and isinstance(agent_data, dict):
-            ev_list = agent_data.get("evidence", [])
-            if isinstance(ev_list, list):
-                all_evidence.extend(ev_list)
-            ledger.add_entries_from_agent(agent_data)
-
-    ledger.correlate_relationships()
-
-    # Calculate Trust & Risk via deterministic TCE
-    tce = TrustCalculationEngine()
-    tce_res = tce.calculate_trust(ledger)
-
-    session["all_evidence"] = all_evidence
-    session["evidence_ledger"] = ledger.to_dict()
-    session["tce_summary"] = tce_res
-    session["status"] = "completed"
-    session["trust_score"] = tce_res["trust_score"]
-    session["risk_score"] = tce_res["risk_score"]
-    session["verdict"] = tce_res["verdict"]
-
-    # Execute AERE Evidence Reasoning Layer (Additive, Sovereign TCE)
-    if enable_aere:
-        session["aere"] = _execute_aere_reasoning_layer(
-            ledger=ledger,
-            tce_res=tce_res,
-            target=target_url,
-            session_id=session.get("session_id"),
-            aere_provider=aere_provider
-        )
-    else:
-        session["aere"] = None
-
-    return session

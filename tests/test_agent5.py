@@ -17,15 +17,19 @@ Tests cover:
     10. Percent & Double Encoding          — https://example.com/login%3Fuser%3Dadmin & %252F
     11. Invalid & Empty URLs               — "", "   ", None
     12. Schema & Structure Assertion       — Verifies strictly zero trust or risk scores
+    13. Isolated Unit & Mock Tests         — Comprehensive offline unit tests for all URL features, Ledger & TCE
 
 Run:
+    python -m unittest tests/test_agent5.py
     python -u tests/test_agent5.py
 """
 
 import sys
 import os
 import json
+import unittest
 from datetime import datetime
+from unittest.mock import patch, MagicMock
 
 # Ensure parent directory is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -36,7 +40,24 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from agents.agent5_url import analyze_url, get_url_structure
+from agents.agent5_url import (
+    is_safe_for_http,
+    check_ip_instead_of_domain,
+    check_suspicious_characters,
+    check_url_shortener,
+    check_punycode_domain,
+    check_homograph_attack,
+    check_subdomain_analysis,
+    check_query_parameters,
+    check_encoded_url,
+    trace_redirects,
+    analyze_url,
+    get_url_structure
+)
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.trust_calculation_engine import TrustCalculationEngine
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +186,7 @@ def validate_structure(result: dict, test_label: str):
 
 
 # ---------------------------------------------------------------------------
-# Test Cases
+# Original Procedural Scenarios Preserved Verbatim
 # ---------------------------------------------------------------------------
 
 def test_1_normal_url():
@@ -295,7 +316,7 @@ def test_9_compatibility_wrapper():
 
 
 # ---------------------------------------------------------------------------
-# Main Runner
+# Main Runner for Standalone Execution
 # ---------------------------------------------------------------------------
 
 def run_all_tests():
@@ -339,5 +360,175 @@ def run_all_tests():
     print_separator("=", 70)
 
 
+# ---------------------------------------------------------------------------
+# Standard unittest.TestCase Class for Automated Discovery
+# ---------------------------------------------------------------------------
+
+class TestAgent5URL(unittest.TestCase):
+    """
+    Unit and integration test cases for Agent 5 URL structure analysis.
+    Preserves all 9 original procedural scenarios and adds mock unit tests.
+    """
+
+    # --- Preserved Original Scenarios ---
+
+    def test_original_scenario_1_normal_url(self):
+        test_1_normal_url()
+
+    def test_original_scenario_2_ip_hostnames(self):
+        test_2_ip_hostnames()
+
+    def test_original_scenario_3_suspicious_characters(self):
+        test_3_suspicious_characters()
+
+    def test_original_scenario_4_url_shortener(self):
+        test_4_url_shortener()
+
+    def test_original_scenario_5_punycode_and_homograph(self):
+        test_5_punycode_and_homograph()
+
+    def test_original_scenario_6_excessive_subdomains(self):
+        test_6_excessive_subdomains()
+
+    def test_original_scenario_7_query_params_and_encoding(self):
+        test_7_query_params_and_encoding()
+
+    def test_original_scenario_8_invalid_urls(self):
+        test_8_invalid_urls()
+
+    def test_original_scenario_9_compatibility_wrapper(self):
+        test_9_compatibility_wrapper()
+
+    # --- Isolated Unit Tests ---
+
+    def test_unit_is_safe_for_http(self):
+        self.assertTrue(is_safe_for_http("https://example.com"))
+        self.assertTrue(is_safe_for_http("http://93.184.216.34/"))
+        self.assertFalse(is_safe_for_http("http://127.0.0.1/"))
+        self.assertFalse(is_safe_for_http("http://localhost/"))
+        self.assertFalse(is_safe_for_http("http://192.168.1.1/"))
+        self.assertFalse(is_safe_for_http("http://10.0.0.1/"))
+        self.assertFalse(is_safe_for_http("http://169.254.169.254/"))
+
+    def test_unit_ip_address_detection(self):
+        v4 = check_ip_instead_of_domain("192.168.1.1")
+        self.assertTrue(v4["detected"])
+        self.assertEqual(v4["ip_version"], "IPv4")
+
+        v6 = check_ip_instead_of_domain("[2001:db8::1]")
+        self.assertTrue(v6["detected"])
+        self.assertEqual(v6["ip_version"], "IPv6")
+
+        named = check_ip_instead_of_domain("example.com")
+        self.assertFalse(named["detected"])
+
+    def test_unit_suspicious_characters_detection(self):
+        res = check_suspicious_characters("https://user@example.com/a//b/c-----d......e", "example.com", "/a//b/c-----d......e")
+        self.assertTrue(res["detected"])
+        self.assertIn("@", res["characters"])
+        self.assertIn("//", res["characters"])
+        self.assertIn("excessive_hyphens", res["characters"])
+        self.assertIn("excessive_dots", res["characters"])
+
+    def test_unit_url_shortener_catalog(self):
+        self.assertTrue(check_url_shortener("bit.ly")["detected"])
+        self.assertTrue(check_url_shortener("tinyurl.com")["detected"])
+        self.assertTrue(check_url_shortener("t.co")["detected"])
+        self.assertFalse(check_url_shortener("google.com")["detected"])
+
+    def test_unit_punycode_and_homograph_analysis(self):
+        puny = check_punycode_domain("xn--pple-43d.com")
+        self.assertTrue(puny["detected"])
+        self.assertEqual(puny["labels"], ["xn--pple-43d"])
+
+        # Cyrillic look-alike
+        cyrillic_a = "\u0430"
+        homo = check_homograph_attack(f"ex{cyrillic_a}mple.com")
+        self.assertTrue(homo["detected"])
+        self.assertIn("Cyrillic", homo["scripts"])
+
+    def test_unit_subdomain_depth_analysis(self):
+        sub_normal = check_subdomain_analysis("api.example.com", is_ip=False)
+        self.assertEqual(sub_normal["subdomain_count"], 1)
+        self.assertFalse(sub_normal["excessive_subdomains"])
+
+        sub_excess = check_subdomain_analysis("a.b.c.d.example.com", is_ip=False)
+        self.assertEqual(sub_excess["subdomain_count"], 4)
+        self.assertTrue(sub_excess["excessive_subdomains"])
+
+        # Multi-part TLD handling (.co.uk)
+        sub_uk = check_subdomain_analysis("login.sub.domain.co.uk", is_ip=False)
+        self.assertEqual(sub_uk["subdomain_count"], 2)
+        self.assertEqual(sub_uk["subdomains"], ["login", "sub"])
+
+    def test_unit_query_parameters_and_redirect_destinations(self):
+        qp, sqp = check_query_parameters("redirect=https://evil.com/login&next=dashboard&token=123")
+        self.assertTrue(qp["present"])
+        self.assertEqual(qp["count"], 3)
+        self.assertTrue(sqp["detected"])
+        param_names = [p["name"] for p in sqp["parameters"]]
+        self.assertIn("redirect", param_names)
+        self.assertIn("next", param_names)
+
+    def test_unit_percent_encoding_and_double_encoding(self):
+        enc = check_encoded_url("https://example.com/path%20test?q=%252Fsecret", "/path%20test", "q=%252Fsecret")
+        self.assertTrue(enc["detected"])
+        self.assertTrue(enc["double_encoding"])
+        self.assertEqual(enc["decoded_components"]["path"], "/path test")
+
+    def test_unit_url_length_evidence_regression(self):
+        # Verify tot_len correctly extracts length and evaluates severity
+        long_url = "https://example.com/" + "a" * 120
+        res = analyze_url(long_url)
+        ev_map = {e["evidence_id"]: e for e in res.get("evidence", [])}
+        self.assertIn("E5-01", ev_map)
+        self.assertEqual(ev_map["E5-01"]["value"], len(long_url))
+        self.assertEqual(ev_map["E5-01"]["severity"], "low")
+
+        short_url = "https://example.com/test"
+        res_short = analyze_url(short_url)
+        ev_short_map = {e["evidence_id"]: e for e in res_short.get("evidence", [])}
+        self.assertEqual(ev_short_map["E5-01"]["value"], len(short_url))
+        self.assertEqual(ev_short_map["E5-01"]["severity"], "info")
+
+    def test_unit_evidence_id_uniqueness_and_schema_validation(self):
+        url = "https://example.com/login?token=abc"
+        res = analyze_url(url)
+        self.assertEqual(res["status"], "success")
+
+        is_valid, errors = validate_agent_result(res)
+        self.assertTrue(is_valid, f"Agent result invalid: {errors}")
+
+        ev_list = res.get("evidence", [])
+        self.assertGreaterEqual(len(ev_list), 8)
+
+        ev_ids = [e["evidence_id"] for e in ev_list]
+        self.assertEqual(len(ev_ids), len(set(ev_ids)), "Evidence IDs must be unique")
+        for eid in ev_ids:
+            self.assertTrue(eid.startswith("E5-"))
+
+        for ev in ev_list:
+            valid_ev, ev_errs = validate_evidence_item(ev)
+            self.assertTrue(valid_ev, f"Invalid evidence item: {ev_errs}")
+
+    def test_unit_normalizer_ledger_and_tce_scoring_neutrality(self):
+        url = "https://example.com/shop/items"
+        res = analyze_url(url)
+        ev_list = res.get("evidence", [])
+
+        ledger = EvidenceLedger(target=url)
+        for ev in ev_list:
+            norm_item = normalize_evidence_item(ev, "A5", res)
+            ledger.add_entry(norm_item)
+
+        self.assertEqual(len(ledger.entries), len(ev_list))
+
+        tce = TrustCalculationEngine()
+        tce_res = tce.calculate_trust(ledger, telemetry_coverage=1.0)
+        self.assertEqual(tce_res["risk_score"], 0.0)
+        self.assertEqual(tce_res["trust_score"], 100.0)
+        self.assertEqual(tce_res["verdict"], "benign")
+
+
 if __name__ == "__main__":
-    run_all_tests()
+    unittest.main()

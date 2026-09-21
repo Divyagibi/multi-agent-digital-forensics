@@ -1,0 +1,25 @@
+{
+  "bootstrap_resamples": 1000,
+  "conditions_evaluated": [
+    "M0",
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6"
+  ],
+  "dataset_hash": "a51ba6748b8e3064177d7c281e9490245d39b821836ec5f947b884023be19cb6",
+  "dataset_integrity_verified_after": true,
+  "dataset_integrity_verified_before": true,
+  "executed_at": "2026-09-16T13:50:27.806574+00:00",
+  "experiment_id": "EXP-STEP6D12-20260916134942",
+  "random_seed": 42,
+  "snapshot_id": "SNAP-a51ba6748b8e3064",
+  "total_records": 1220
+}

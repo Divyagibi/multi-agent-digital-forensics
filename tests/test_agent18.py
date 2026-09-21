@@ -27,7 +27,7 @@ from app import app
 
 def _create_qr_image_bytes(data: str) -> bytes:
     """Helper to generate a valid QR code in memory as PNG bytes."""
-    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(data)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -194,11 +194,11 @@ class TestAgent18QR(unittest.TestCase):
         )
         self.assertGreaterEqual(len(evidence), 5)
         categories = [e["category"] for e in evidence]
-        self.assertIn("qr_decoding", categories)
-        self.assertIn("embedded_url", categories)
-        self.assertIn("url_shortener", categories)
-        self.assertIn("redirect_chain", categories)
-        self.assertIn("hidden_parameters", categories)
+        self.assertIn("qr_format_parsed", categories)
+        self.assertIn("url_shortener_redirect", categories)
+        self.assertIn("automatic_client_redirect", categories)
+        self.assertIn("hidden_redirect_parameter", categories)
+        self.assertIn("clean_qr_image_structure", categories)
 
     # 11. Full Agent 18 Analysis with QR Image
     def test_analyze_qr_with_image(self):
@@ -381,6 +381,122 @@ class TestAgent18QR(unittest.TestCase):
         self.assertEqual(res_json["status"], "completed")
         self.assertEqual(res_json["target_url"], "https://company.test")
 
+    # 25. Evidence Type Classification (deterministic / inference, never fake threat_intelligence)
+    def test_evidence_type_deterministic_and_not_threat_intelligence(self):
+        res = analyze_qr(url="https://bit.ly/test-url")
+        evidence = res.get("evidence", [])
+        self.assertGreaterEqual(len(evidence), 1)
+        for ev in evidence:
+            self.assertIn(
+                ev.get("type"),
+                ["deterministic", "inference"],
+                f"Static A18 evidence must be deterministic or inference: {ev}"
+            )
+            self.assertNotEqual(
+                ev.get("type"),
+                "threat_intelligence",
+                f"Local heuristic must not claim external threat_intelligence: {ev}"
+            )
+
+    # 26. SSRF Protection in HTTP Redirect Tracing (private, loopback, metadata blocked)
+    def test_ssrf_protection_in_redirect_tracing(self):
+        # 127.0.0.1
+        res_loopback = trace_redirect_chain("http://127.0.0.1:8080/admin")
+        self.assertEqual(res_loopback["redirect_count"], 0)
+        self.assertTrue(any("restricted/private IP" in err for err in res_loopback["errors"]))
+
+        # 10.0.0.1
+        res_private = trace_redirect_chain("http://10.0.0.1/internal")
+        self.assertEqual(res_private["redirect_count"], 0)
+        self.assertTrue(any("restricted/private IP" in err for err in res_private["errors"]))
+
+        # 169.254.169.254 (cloud metadata)
+        res_meta = trace_redirect_chain("http://169.254.169.254/latest/meta-data/")
+        self.assertEqual(res_meta["redirect_count"], 0)
+        self.assertTrue(any("restricted/private IP" in err for err in res_meta["errors"]))
+
+    # 27. QR Decoding Failure Severity & Category
+    def test_qr_decoding_failure_is_info_neutral(self):
+        # Non-QR image
+        img = Image.new("RGB", (100, 100), color="white")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        res = analyze_qr(image_input=buf.getvalue())
+
+        evidence = res.get("evidence", [])
+        dec_ev = [e for e in evidence if e.get("index") == 1 or "decoding" in e.get("finding", "").lower()]
+        self.assertTrue(len(dec_ev) > 0)
+        for e in dec_ev:
+            self.assertEqual(e.get("severity"), "info")
+            self.assertEqual(e.get("category"), "qr_format_parsed")
+
+    # 28. High-Risk URI Schemes (javascript:, data:, file:)
+    def test_high_risk_uri_schemes(self):
+        js_data = "javascript:alert(document.cookie)"
+        js_bytes = _create_qr_image_bytes(js_data)
+        res_js = decode_qr_image(js_bytes)
+        self.assertTrue(res_js["decoded"])
+        self.assertEqual(res_js["data_type"], "HIGH_RISK_URI")
+
+        ext_url, is_url = extract_embedded_url(js_data)
+        self.assertFalse(is_url)
+        self.assertIsNone(ext_url)
+
+        file_data = "file:///etc/shadow"
+        file_bytes = _create_qr_image_bytes(file_data)
+        res_file = decode_qr_image(file_bytes)
+        self.assertTrue(res_file["decoded"])
+        self.assertEqual(res_file["data_type"], "HIGH_RISK_URI")
+
+    # 29. Deep Link Schemes (intent://, market://)
+    def test_deep_link_schemes(self):
+        intent_data = "intent://scan/#Intent;scheme=zxing;package=com.google.zxing.client.android;end"
+        intent_bytes = _create_qr_image_bytes(intent_data)
+        res_intent = decode_qr_image(intent_bytes)
+        self.assertTrue(res_intent["decoded"])
+        self.assertEqual(res_intent["data_type"], "DEEP_LINK")
+
+    # 30. JSON and Benign Non-URL Payloads
+    def test_json_and_geolocation_payloads(self):
+        json_data = '{"action": "checkin", "location_id": 9941}'
+        json_bytes = _create_qr_image_bytes(json_data)
+        res_json = decode_qr_image(json_bytes)
+        self.assertTrue(res_json["decoded"])
+        self.assertEqual(res_json["data_type"], "JSON")
+
+        geo_data = "geo:37.7749,-122.4194"
+        geo_bytes = _create_qr_image_bytes(geo_data)
+        res_geo = decode_qr_image(geo_bytes)
+        self.assertTrue(res_geo["decoded"])
+        self.assertEqual(res_geo["data_type"], "GEOLOCATION")
+
+    # 31. False Positive Prevention for Legitimate Payloads
+    def test_benign_payload_false_positive_prevention(self):
+        bank_url = "https://www.chase.com/personal/banking"
+        res = analyze_qr(url=bank_url)
+        evidence = res.get("evidence", [])
+        for ev in evidence:
+            if ev.get("category") in ("clean_qr_destination", "clean_http_route", "clean_query_parameters", "clean_qr_image_structure", "qr_format_parsed"):
+                self.assertEqual(ev.get("severity"), "info")
+
+    # 32. TCE Category & Polarity Resolution
+    def test_tce_explicit_category_resolution(self):
+        from services.tce_config import resolve_evidence_polarity
+
+        # Risk-increasing categories
+        self.assertEqual(resolve_evidence_polarity("url_shortener_redirect"), "risk_increasing")
+        self.assertEqual(resolve_evidence_polarity("automatic_client_redirect"), "risk_increasing")
+        self.assertEqual(resolve_evidence_polarity("hidden_redirect_parameter"), "risk_increasing")
+        self.assertEqual(resolve_evidence_polarity("qr_visual_modification"), "risk_increasing")
+
+        # Neutral categories
+        self.assertEqual(resolve_evidence_polarity("qr_format_parsed"), "neutral")
+        self.assertEqual(resolve_evidence_polarity("clean_qr_destination"), "neutral")
+        self.assertEqual(resolve_evidence_polarity("clean_http_route"), "neutral")
+        self.assertEqual(resolve_evidence_polarity("clean_query_parameters"), "neutral")
+        self.assertEqual(resolve_evidence_polarity("clean_qr_image_structure"), "neutral")
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -23,7 +23,14 @@ from agents.agent14_history import (
     _detect_domain_reuse,
     _evaluate_historical_inconsistencies,
     _build_master_timeline,
+    _is_safe_url,
+    _fetch_current_page_and_claims,
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
+from services.trust_calculation_engine import TrustCalculationEngine
 
 # Mock CDX Data Fixtures
 MOCK_CDX_ROWS = [
@@ -240,6 +247,84 @@ class TestAgent14History(unittest.TestCase):
             self.assertIn("wayback_history", data)
             self.assertIn("timeline", data)
             self.assertIn("domain_reuse", data)
+
+    def test_ssrf_protection_and_safety_checks(self):
+        """Test SSRF protection blocks private IPs, localhost, cloud metadata."""
+        self.assertFalse(_is_safe_url("http://localhost/test"))
+        self.assertFalse(_is_safe_url("http://127.0.0.1:8080/admin"))
+        self.assertFalse(_is_safe_url("http://169.254.169.254/latest/meta-data/"))
+        self.assertFalse(_is_safe_url("http://10.0.0.1/intranet"))
+        self.assertFalse(_is_safe_url("http://192.168.1.1/router"))
+        self.assertFalse(_is_safe_url("http://metadata.google.internal/computeMetadata/v1/"))
+        self.assertTrue(_is_safe_url("https://example.com/index.html"))
+
+        # Verify _fetch_current_page_and_claims rejects SSRF target
+        session = MagicMock()
+        html, final_url, soup, yr, errors = _fetch_current_page_and_claims("http://127.0.0.1:5000", session)
+        self.assertIsNone(html)
+        self.assertTrue(any("SSRF" in err for err in errors))
+
+    @patch("agents.agent14_history._fetch_current_page_and_claims")
+    def test_common_evidence_schema_and_ledger_ingestion(self, mock_fetch):
+        """Test that all A14 evidence items validate and ingest cleanly into EvidenceLedger."""
+        soup = BeautifulSoup(MOCK_CURRENT_CLAIM_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_CURRENT_CLAIM_HTML, "https://example-history.com", soup, 2005, [])
+        mock_cdx = lambda d: (MOCK_CDX_ROWS[1:], 8)
+
+        result = analyze_history("https://example-history.com", cdx_override=mock_cdx)
+        self.assertTrue(validate_agent_result(result))
+
+        ledger = EvidenceLedger()
+        for ev in result["evidence"]:
+            self.assertTrue(validate_evidence_item(ev))
+            self.assertIn("category", ev)
+            norm = normalize_evidence_item(ev, "A14", "https://example-history.com")
+            ledger.add_entry(norm)
+
+        self.assertEqual(len(ledger.entries), len(result["evidence"]))
+
+    @patch("agents.agent14_history._fetch_current_page_and_claims")
+    def test_no_forbidden_agent_scores_or_verdicts(self, mock_fetch):
+        """Ensure A14 strictly outputs forensic observations and no agent-level risk scores or verdicts."""
+        soup = BeautifulSoup(MOCK_CURRENT_CLAIM_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_CURRENT_CLAIM_HTML, "https://example-history.com", soup, 2005, [])
+        result = analyze_history("https://example-history.com", cdx_override=lambda d: (MOCK_CDX_ROWS[1:], 8))
+
+        forbidden_keys = {"trust_score", "risk_score", "is_scam", "is_legitimate", "final_verdict", "risk_level"}
+        for k in forbidden_keys:
+            self.assertNotIn(k, result)
+            self.assertNotIn(k, result.get("data", {}))
+
+    @patch("agents.agent14_history._fetch_current_page_and_claims")
+    def test_tce_integration_and_polarity_resolution(self, mock_fetch):
+        """Verify that all A14 evidence item categories resolve cleanly in TCE taxonomy."""
+        soup = BeautifulSoup(MOCK_CURRENT_CLAIM_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_CURRENT_CLAIM_HTML, "https://example-history.com", soup, 2005, [])
+        result = analyze_history("https://example-history.com", cdx_override=lambda d: (MOCK_CDX_ROWS[1:], 8))
+
+        for ev in result["evidence"]:
+            cat = ev.get("category")
+            polarity = resolve_evidence_polarity(cat, ev.get("finding", ""))
+            self.assertIn(polarity, {"risk_reducing", "risk_increasing", "neutral"})
+
+    @patch("agents.agent14_history._fetch_current_page_and_claims")
+    def test_scope_boundaries_and_temporal_provenance(self, mock_fetch):
+        """Verify A14 preserves historical provenance and does not claim current live A1/A2 ownership/DNS."""
+        soup = BeautifulSoup(MOCK_CURRENT_CLAIM_HTML, "html.parser")
+        mock_fetch.return_value = (MOCK_CURRENT_CLAIM_HTML, "https://example-history.com", soup, 2005, [])
+        result = analyze_history("https://example-history.com", cdx_override=lambda d: (MOCK_CDX_ROWS[1:], 8))
+
+        # Check that snapshots retain historical timestamps and URLs
+        for snap in result["wayback_history"]["selected_snapshots"]:
+            self.assertIn("timestamp", snap)
+            self.assertIn("date", snap)
+            self.assertIn("snapshot_url", snap)
+
+        # Check timeline events preserve temporal source attribution
+        for event in result["timeline"]:
+            self.assertIn("date", event)
+            self.assertIn("source", event)
+            self.assertIn("event", event)
 
 
 if __name__ == "__main__":

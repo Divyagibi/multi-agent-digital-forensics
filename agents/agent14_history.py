@@ -18,6 +18,7 @@ DO NOT calculate final Trust/Risk score or declare legitimate/scam.
 """
 
 import datetime
+import ipaddress
 import json
 import os
 import re
@@ -52,6 +53,50 @@ DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+BLOCKED_IP_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL is safe to fetch (blocks SSRF, private IPs, loopback, cloud metadata)."""
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if hostname in ("localhost", "127.0.0.1", "::1", "metadata.google.internal", "instance-data"):
+            return False
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            for net in BLOCKED_IP_NETWORKS:
+                if ip_obj in net:
+                    return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
 
 # Domain parking and inactivity indicators
 PARKING_INDICATORS = [
@@ -111,6 +156,10 @@ def _fetch_current_page_and_claims(
     errors = []
     claimed_year = None
 
+    if not _is_safe_url(url):
+        errors.append("Target URL blocked by security policy (SSRF protection)")
+        return None, url, None, None, errors
+
     try:
         resp = session.get(
             url,
@@ -138,6 +187,9 @@ def _fetch_current_page_and_claims(
         return None, url, None, None, errors
 
     final_url = resp.url or url
+    if not _is_safe_url(final_url):
+        errors.append("Redirect target URL blocked by security policy (SSRF protection)")
+        return None, final_url, None, None, errors
     try:
         content_chunks = []
         downloaded = 0
@@ -913,15 +965,25 @@ def analyze_history(
 
     # E14-01: Wayback Machine Archive
     has_archive = wayback_history.get("available", False)
+    snap_count = wayback_history.get("snapshot_count", 0)
+    has_mature_tenure = has_archive and (isinstance(snap_count, int) and snap_count >= 5)
+    if has_mature_tenure:
+        wb_finding = "Long-term Wayback Machine historical archive tenure"
+    elif has_archive:
+        wb_finding = "Wayback Machine historical snapshot availability"
+    else:
+        wb_finding = "No Wayback Machine historical snapshots found"
+
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=1,
-        finding="Wayback Machine historical snapshot availability",
-        value=wayback_history.get("snapshot_count", 0),
-        severity="info" if has_archive else "low",
+        category="long_term_archive_tenure" if has_mature_tenure else ("historical_continuity_verified" if has_archive else "meta_description_present"),
+        finding=wb_finding,
+        value=snap_count,
+        severity="low" if (has_mature_tenure or has_archive) else "info",
         source="Internet Archive CDX API",
         evidence_type="historical",
-        evidence_strength=0.1,
+        evidence_strength=0.75 if has_mature_tenure else 0.4,
         metadata=wayback_history
     ))
 
@@ -932,6 +994,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=2,
+        category="brand_domain_mismatch" if has_shift else "historical_continuity_verified",
         finding="Historical content evolution and identity transformation",
         value=len(id_changes) + len(cat_changes),
         severity="high" if has_shift else "info",
@@ -946,6 +1009,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=3,
+        category="brand_domain_mismatch" if len(ow_changes) > 0 else "historical_continuity_verified",
         finding="Historical domain registration and ownership transfer records",
         value=len(ow_changes),
         severity="medium" if len(ow_changes) > 0 else "info",
@@ -960,6 +1024,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=4,
+        category="meta_description_present",
         finding="Historical DNS records and infrastructure transitions",
         value=len(ip_changes),
         severity="info",
@@ -974,6 +1039,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=5,
+        category="threat_intel_blocklist" if len(neg_reps) > 0 else "meta_description_present",
         finding="Historical cybersecurity incident and blacklisting records",
         value=len(neg_reps),
         severity="critical" if len(neg_reps) > 0 else "info",
@@ -988,6 +1054,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=6,
+        category="brand_domain_mismatch" if reuse_possible else "historical_continuity_verified",
         finding="Domain repurposing and parked/inactive periods",
         value=reuse_possible,
         severity="high" if reuse_possible else "info",
@@ -998,12 +1065,17 @@ def analyze_history(
     ))
 
     # E14-07: Historical Inconsistencies
-    has_inconsistencies = bool(historical_inconsistencies)
+    genuine_inconsistencies = [
+        inc for inc in historical_inconsistencies
+        if inc.get("assessment") != "not_verifiable_from_wayback"
+    ]
+    has_inconsistencies = bool(genuine_inconsistencies)
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=7,
+        category="brand_domain_mismatch" if has_inconsistencies else "meta_description_present",
         finding="Discrepancies between claimed founding claims and historical archive",
-        value=len(historical_inconsistencies),
+        value=len(genuine_inconsistencies),
         severity="high" if has_inconsistencies else "info",
         source="Temporal Consistency Engine",
         evidence_type="inference",
@@ -1015,6 +1087,7 @@ def analyze_history(
     structured_evidence.append(create_evidence_item(
         agent_id="A14",
         index=8,
+        category="meta_description_present",
         finding="Chronological domain lifecycle event timeline",
         value=len(master_timeline),
         severity="info",
@@ -1039,7 +1112,7 @@ def analyze_history(
         "redirect_history": redirect_history,
         "historical_inconsistencies": historical_inconsistencies,
         "timeline": master_timeline,
-        "evidence": forensic_evidence,
+        "evidence_summary": forensic_evidence,
     }
 
     extra_fields = {

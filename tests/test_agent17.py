@@ -12,8 +12,14 @@ from agents.agent17_malware import (
     detect_cryptocurrency_mining_and_wasm,
     detect_javascript_obfuscation,
     profile_external_resources,
-    compile_malware_evidence
+    compile_malware_evidence,
+    _is_private_or_restricted_ip,
+    _resolve_target_ip
 )
+from services.evidence_schema import validate_evidence_item, validate_agent_result
+from services.evidence_normalizer import normalize_evidence_item
+from services.evidence_ledger import EvidenceLedger
+from services.tce_config import resolve_evidence_polarity
 from app import app
 
 
@@ -216,8 +222,10 @@ class TestAgent17Malware(unittest.TestCase):
         self.assertIn("obfuscated_javascript", categories)
 
     # 17. Network timeout / fetch failure handling
+    @patch("agents.agent17_malware._resolve_target_ip")
     @patch("agents.agent17_malware._safe_fetch_page")
-    def test_network_fetch_failure(self, mock_fetch):
+    def test_network_fetch_failure(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
         mock_fetch.return_value = (
             None,
             {"status_code": None, "final_url": "https://unreachable.test"},
@@ -225,7 +233,7 @@ class TestAgent17Malware(unittest.TestCase):
         )
         res = analyze_malware_indicators("https://unreachable.test")
         self.assertEqual(res["status"], "completed")
-        self.assertIn("Connection timed out", res["errors"][0]["error"])
+        self.assertTrue(any("Connection timed out" in err.get("error", "") for err in res["errors"]))
 
     # 18. Invalid URL input handling
     def test_invalid_url_input(self):
@@ -298,6 +306,170 @@ class TestAgent17Malware(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.data)
         self.assertIn("error", data)
+
+    # 23. Comprehensive SSRF & IPv6 / Cloud Metadata Restriction
+    def test_ssrf_comprehensive_protection(self):
+        self.assertTrue(_is_private_or_restricted_ip("127.0.0.1"))
+        self.assertTrue(_is_private_or_restricted_ip("10.254.0.1"))
+        self.assertTrue(_is_private_or_restricted_ip("172.16.5.5"))
+        self.assertTrue(_is_private_or_restricted_ip("192.168.100.1"))
+        self.assertTrue(_is_private_or_restricted_ip("169.254.169.254"))
+        self.assertTrue(_is_private_or_restricted_ip("0.0.0.0"))
+        self.assertTrue(_is_private_or_restricted_ip("::1"))
+        self.assertTrue(_is_private_or_restricted_ip("fe80::1"))
+        self.assertTrue(_is_private_or_restricted_ip("fc00::1"))
+        self.assertFalse(_is_private_or_restricted_ip("93.184.216.34"))
+        self.assertFalse(_is_private_or_restricted_ip("1.1.1.1"))
+        self.assertFalse(_is_private_or_restricted_ip("2606:4700::6810:7c60"))
+
+        res = analyze_malware_indicators("http://127.0.0.1:8000")
+        self.assertEqual(res["status"], "restricted")
+        self.assertIn("private or restricted", res["error"])
+
+    # 24. Common Evidence Schema & Evidence Ledger Ingestion
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_evidence_schema_and_ledger_ingestion(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        html = "<html><body><a href='/patch.exe'>Download</a></body></html>"
+        mock_fetch.return_value = (
+            html,
+            {
+                "status_code": 200,
+                "final_url": "https://example.com",
+                "content_type": "text/html",
+                "page_size_bytes": len(html),
+                "redirect_to_download": False,
+                "download_destination": None,
+                "download_extension": None
+            },
+            []
+        )
+        result = analyze_malware_indicators("https://example.com")
+        is_valid, errs = validate_agent_result(result)
+        self.assertTrue(is_valid, f"Validation errors: {errs}")
+        self.assertEqual(len(result["evidence"]), 6)
+
+        ledger = EvidenceLedger()
+        for ev in result["evidence"]:
+            is_ev_valid, ev_errs = validate_evidence_item(ev)
+            self.assertTrue(is_ev_valid, f"Item errors: {ev_errs}")
+            self.assertTrue(ev["evidence_id"].startswith("E17-"))
+            self.assertIn("category", ev)
+            norm_item = normalize_evidence_item(ev, agent_identifier="A17")
+            ledger.add_entry(norm_item)
+
+        items = ledger.get_entries()
+        self.assertEqual(len(items), 6)
+
+    # 25. Absence of Forbidden Autonomous Scoring / Verdicts
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_no_autonomous_scoring_or_verdict(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        mock_fetch.return_value = ("<html><body>Safe</body></html>", {"status_code": 200, "final_url": "https://example.com"}, [])
+        result = analyze_malware_indicators("https://example.com")
+        self.assertIsNone(result.get("trust_score"))
+        self.assertIsNone(result.get("risk_score"))
+        self.assertNotIn("verdict", result.get("data", {}))
+
+    # 26. Declarative TCE Polarity Resolution for A17 Categories
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_tce_polarity_resolution(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        # HTML with executable download and obfuscated javascript
+        html = "<html><body><a href='installer.exe'>Install</a><script>eval(atob('YWxlcnQoMSk='));</script></body></html>"
+        mock_fetch.return_value = (html, {"status_code": 200, "final_url": "https://example.com"}, [])
+        result = analyze_malware_indicators("https://example.com")
+        for ev in result["evidence"]:
+            cat = ev.get("category", "")
+            polarity = resolve_evidence_polarity(cat, ev.get("finding", ""))
+            self.assertIn(polarity, ("risk_reducing", "risk_increasing", "neutral"))
+
+    # 27. Scope Boundary Validation
+    def test_scope_boundary_purity(self):
+        import agents.agent17_malware as a17_mod
+        forbidden_terms = ["whois", "dnssec", "virustotal", "phishtank", "yara", "clamav"]
+        with open(a17_mod.__file__, "r", encoding="utf-8") as f:
+            source_code = f.read().lower()
+        for term in forbidden_terms:
+            self.assertNotIn(f"def {term}", source_code)
+            self.assertNotIn(f"class {term}", source_code)
+
+    # 28. Evidence Type Semantics (Deterministic/Inference, never Threat Intelligence)
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_28_evidence_types_deterministic_inference(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        html = "<html><body><a href='/setup.exe'>Setup</a><script>eval(atob('YWxlcnQoMSk='));</script></body></html>"
+        mock_fetch.return_value = (html, {"status_code": 200, "final_url": "https://example.com"}, [])
+        result = analyze_malware_indicators("https://example.com")
+        for ev in result["evidence"]:
+            self.assertIn(ev["type"], ("deterministic", "inference"))
+            self.assertNotEqual(ev["type"], "threat_intelligence")
+
+    # 29. SSRF Neutrality & No Malicious IP Claim
+    def test_29_ssrf_neutrality_and_no_malicious_ip_claim(self):
+        res = analyze_malware_indicators("http://192.168.1.1:8080")
+        self.assertEqual(res["status"], "restricted")
+        self.assertEqual(len(res["evidence"]), 1)
+        ev = res["evidence"][0]
+        self.assertEqual(ev["category"], "restricted_target_network")
+        self.assertEqual(ev["severity"], "info")
+        self.assertEqual(ev["type"], "deterministic")
+        self.assertNotEqual(ev["category"], "known_malicious_ip")
+        polarity = resolve_evidence_polarity(ev["category"], ev["finding"])
+        self.assertEqual(polarity, "neutral")
+
+    # 30. No Meta Description Fallback
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_30_no_meta_description_fallback(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        html = "<html><body><h1>Clean Page</h1><p>No malware here</p></body></html>"
+        mock_fetch.return_value = (html, {"status_code": 200, "final_url": "https://clean.example.com"}, [])
+        result = analyze_malware_indicators("https://clean.example.com")
+        for ev in result["evidence"]:
+            self.assertNotEqual(ev.get("category"), "meta_description_present")
+            self.assertIn(ev.get("category"), ("clean_download_analysis", "clean_static_scripts", "analytics_tracker_detected"))
+
+    # 31. Suspicious Isolated eval/atob Is Not Confirmed Malware
+    def test_31_suspicious_isolated_eval_atob_not_confirmed_malware(self):
+        html = "<html><body><script>let str = atob('aGVsbG8=');</script></body></html>"
+        soup = BeautifulSoup(html, "html.parser")
+        obf = detect_javascript_obfuscation(soup, html)
+        # Single benign atob without eval or packed code does not trigger high obfuscation
+        self.assertFalse(obf["detected"])
+
+    # 32. Executable Download Indicator Semantics
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_32_executable_download_indicator_semantics(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        html = "<html><body><a href='https://software.org/installer.exe'>Download App</a></body></html>"
+        mock_fetch.return_value = (html, {"status_code": 200, "final_url": "https://software.org"}, [])
+        result = analyze_malware_indicators("https://software.org")
+        e17_01 = next(e for e in result["evidence"] if e["evidence_id"] == "E17-01")
+        self.assertEqual(e17_01["category"], "suspicious_executable_download")
+        self.assertEqual(e17_01["severity"], "high")
+        self.assertEqual(e17_01["type"], "deterministic")
+        self.assertIn("executable", e17_01["finding"].lower())
+
+    # 33. Analytics Tracker Neutrality
+    @patch("agents.agent17_malware._resolve_target_ip")
+    @patch("agents.agent17_malware._safe_fetch_page")
+    def test_33_analytics_tracker_neutrality(self, mock_fetch, mock_resolve):
+        mock_resolve.return_value = ("93.184.216.34", None)
+        html = "<html><head><script src='https://www.google-analytics.com/analytics.js'></script></head><body>Hello</body></html>"
+        mock_fetch.return_value = (html, {"status_code": 200, "final_url": "https://example.com"}, [])
+        result = analyze_malware_indicators("https://example.com")
+        e17_06 = next(e for e in result["evidence"] if e["evidence_id"] == "E17-06")
+        self.assertEqual(e17_06["category"], "analytics_tracker_detected")
+        self.assertEqual(e17_06["severity"], "info")
+        self.assertEqual(e17_06["type"], "deterministic")
+        polarity = resolve_evidence_polarity(e17_06["category"], e17_06["finding"])
+        self.assertEqual(polarity, "neutral")
 
 
 if __name__ == "__main__":
